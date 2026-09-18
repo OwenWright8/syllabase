@@ -135,8 +135,11 @@ services:
     env_file:
       # Separate from .env on purpose — accounts.env is the one file you
       # touch to add a user or reset a password, kept apart from the
-      # deployment-wide secrets in .env.
-      - accounts.env
+      # deployment-wide secrets in .env. Optional so `docker compose
+      # config`/`up` doesn't hard-fail before you've copied
+      # accounts.env.example to accounts.env.
+      - path: accounts.env
+        required: false
     environment:
       GOTRUE_URL: http://auth:9999
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}

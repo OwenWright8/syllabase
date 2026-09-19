@@ -17,6 +17,15 @@ echo "[start] postgres is ready"
 echo "[start] applying migrations..."
 DATABASE_URL="$DB_URL" MIGRATIONS_DIR="/app/migrations" /app/migrate.sh
 
+echo "[start] setting cron secret..."
+# Set at the database level (not via a postgres command-line flag) so it
+# takes effect immediately for new sessions — including the ones pg_cron
+# opens per scheduled run — without needing a server restart, and without
+# touching the db container's own startup command (see docker-compose.yml
+# for why overriding that command broke the image's own init sequence).
+psql "$DB_URL" -v ON_ERROR_STOP=1 -v cron_secret="$CRON_SECRET" \
+  -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.cron_secret = :'cron_secret'"
+
 echo "[start] writing runtime frontend config..."
 export VITE_SUPABASE_URL="$SITE_URL"
 envsubst '${VITE_SUPABASE_URL} ${VITE_SUPABASE_PUBLISHABLE_KEY}' \

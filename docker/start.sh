@@ -23,8 +23,14 @@ echo "[start] setting cron secret..."
 # opens per scheduled run — without needing a server restart, and without
 # touching the db container's own startup command (see docker-compose.yml
 # for why overriding that command broke the image's own init sequence).
-psql "$DB_URL" -v ON_ERROR_STOP=1 -v cron_secret="$CRON_SECRET" \
-  -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.cron_secret = :'cron_secret'"
+#
+# Built as a plain escaped SQL string literal rather than psql's :'var'
+# substitution — that syntax didn't interpolate when passed via -c (it
+# reached Postgres as the literal text ":'cron_secret'", confirmed against
+# a live run), so this escapes single quotes by doubling them instead.
+CRON_SECRET_SQL=$(printf '%s' "$CRON_SECRET" | sed "s/'/''/g")
+psql "$DB_URL" -v ON_ERROR_STOP=1 \
+  -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.cron_secret = '${CRON_SECRET_SQL}'"
 
 echo "[start] writing runtime frontend config..."
 export VITE_SUPABASE_URL="$SITE_URL"

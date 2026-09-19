@@ -39,12 +39,3 @@ jobs:
         with:
           context: .
           push: false
-
-      - name: Build seed-accounts image
-        run: |
-          docker build -f - -t seed-accounts:ci . <<'EOF'
-          FROM node:20-alpine
-          WORKDIR /app
-          COPY docker/seed-accounts.mjs .
-          CMD ["node", "seed-accounts.mjs"]
-          EOF

@@ -20,28 +20,17 @@ Syllabase runs entirely on your own infrastructure via Docker Compose — a self
 
 ```sh
 cp .env.example .env
-cp accounts.env.example accounts.env
 ```
 
 Edit `.env`: set `POSTGRES_PASSWORD`, generate `JWT_SECRET`/`ANON_KEY`/`SERVICE_ROLE_KEY`/`CRON_SECRET`, and set `SITE_URL`/`VITE_SUPABASE_URL` to your actual domain(s). See the comments in `.env.example` for exactly what each value needs to be and how to generate the JWT-based keys.
-
-Edit `accounts.env`: list the username/password pairs for whoever should have an account. There's no public sign-up page — this file *is* the account system.
 
 ```sh
 docker compose up -d
 ```
 
-That's it — Postgres, auth, the REST API, the 4 edge functions, and the frontend all come up together, migrations apply automatically, and your accounts get created. `frontend` and `seed-accounts` pull prebuilt images from GHCR by default (published by the [Release workflow](.github/workflows/release.yml) on every tagged version) — nothing to build yourself unless you want to. Run `docker compose build` instead if you'd rather build from source, or are working from an unreleased commit.
+That's it — Postgres, auth, the REST API, the 5 edge functions, and the frontend all come up together, and migrations apply automatically. `frontend` pulls a prebuilt image from GHCR by default (published by the [Release workflow](.github/workflows/release.yml) on every tagged version) — nothing to build yourself unless you want to. Run `docker compose build` instead if you'd rather build from source, or are working from an unreleased commit.
 
-### Resetting a password
-
-Edit `accounts.env`, then:
-
-```sh
-docker compose up -d seed-accounts
-```
-
-No email, no SMTP server, no admin panel — editing the file *is* the reset mechanism.
+Visit the site: since this is a fresh instance with no accounts yet, you'll be prompted to create one. Every visit after that shows the normal sign in / sign up screen — anyone with the URL can create their own account and their own private data (there's no email verification since there's no SMTP server involved), so keep that in mind if you're putting this on the open internet rather than behind a VPN/private network.
 
 ### Notifications (optional)
 
@@ -71,7 +60,7 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 - A day-planner view for ordering exactly what you're working on, when.
 
 ### 👤 Accounts
-- Username/password accounts, provisioned by whoever runs the instance (see Self-hosting above) — no public signup.
+- Username/password accounts. The first visit to a fresh instance creates the first account; after that it's a normal sign in / sign up screen.
 - Change your password from the Profile page once logged in.
 
 ### 🔌 Homepage widget

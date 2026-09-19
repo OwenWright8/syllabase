@@ -6,14 +6,16 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   signIn: (username: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (username: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
 
-// Self-hosted accounts are username/password pairs provisioned by whoever
-// runs the instance (see seed-accounts) rather than public email signup.
-// GoTrue is still email-shaped under the hood, so a username is mapped to
-// a fixed pseudo-domain before ever talking to Supabase auth.
+// Self-hosted accounts are username/password, not email — but GoTrue is
+// still email-shaped under the hood, so a username is mapped to a fixed
+// pseudo-domain before ever talking to Supabase auth. The Auth page
+// decides whether to show sign-in or first-run sign-up based on whether
+// any account exists yet (see the instance-status function).
 const ACCOUNT_EMAIL_DOMAIN = "accounts.local";
 
 function usernameToEmail(username: string): string {
@@ -53,12 +55,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  const signUp = async (username: string, password: string) => {
+    const { error } = await supabase.auth.signUp({
+      email: usernameToEmail(username),
+      password,
+      options: {
+        data: { username: username.trim().toLowerCase() },
+      },
+    });
+    return { error };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, signIn, signOut, loading }}>
+    <AuthContext.Provider value={{ user, session, signIn, signUp, signOut, loading }}>
       {children}
     </AuthContext.Provider>
   );

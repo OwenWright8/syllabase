@@ -4,15 +4,17 @@
 # 5 edge functions, and the frontend, with nginx as the internal
 # gateway between them) — see Dockerfile and docker/start.sh.
 #
-# Before relying on this in production: verify the `db` image tag exists
-# for your host's architecture (`docker manifest inspect <image>:<tag>`),
-# and see the Dockerfile's own caution note about the `app` image's
-# upstream binary paths — neither has been confirmed against a live build
-# in the environment this was written in.
+# Image tags are pinned to match Supabase's own official self-hosting
+# reference compose — see the Dockerfile's own note on why that matters
+# (gotrue/postgrest/edge-runtime and this postgres version are tested
+# together upstream, not interchangeable independently). Confirmed
+# working via a live build+run in CI on linux/amd64; re-verify with
+# `docker manifest inspect <image>:<tag>` before relying on this on
+# another architecture (e.g. a Raspberry Pi).
 
 services:
   db:
-    image: supabase/postgres:15.8.1.049
+    image: supabase/postgres:17.6.1.136
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

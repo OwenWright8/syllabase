@@ -7,6 +7,14 @@
 set -eu
 
 DB_URL="postgres://postgres:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
+# GoTrue and PostgREST connect as their own dedicated roles (created by
+# the supabase/postgres image's own init, matching Supabase's official
+# reference compose) rather than the plain postgres superuser — GoTrue's
+# internal schema migrations specifically expect to run as the role that
+# owns the auth schema. Confirmed live: running them as `postgres`
+# instead caused GoTrue's own migrations to fail against this image.
+GOTRUE_DB_URL="postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
+POSTGREST_DB_URL="postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
 
 echo "[start] waiting for postgres..."
 until pg_isready -h db -p 5432 -U postgres >/dev/null 2>&1; do
@@ -58,8 +66,9 @@ GOTRUE_API_PORT=9999 \
 API_EXTERNAL_URL="$SITE_URL" \
 GOTRUE_SITE_URL="$SITE_URL" \
 GOTRUE_URI_ALLOW_LIST="$SITE_URL" \
+GOTRUE_JWT_ISSUER="$SITE_URL" \
 GOTRUE_DB_DRIVER=postgres \
-GOTRUE_DB_DATABASE_URL="$DB_URL" \
+GOTRUE_DB_DATABASE_URL="$GOTRUE_DB_URL" \
 GOTRUE_JWT_SECRET="$JWT_SECRET" \
 GOTRUE_JWT_EXP="${JWT_EXP:-3600}" \
 GOTRUE_JWT_AUD=authenticated \
@@ -71,9 +80,10 @@ GOTRUE_MAILER_AUTOCONFIRM=true \
 GOTRUE_PID=$!
 
 echo "[start] starting postgrest..."
-PGRST_DB_URI="$DB_URL" \
+PGRST_DB_URI="$POSTGREST_DB_URL" \
 PGRST_DB_SCHEMAS=public \
 PGRST_DB_ANON_ROLE=anon \
+PGRST_DB_USE_LEGACY_GUCS=false \
 PGRST_JWT_SECRET="$JWT_SECRET" \
 PGRST_SERVER_PORT=3000 \
   /usr/local/bin/postgrest &

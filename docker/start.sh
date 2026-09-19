@@ -90,12 +90,16 @@ PGRST_SERVER_PORT=3000 \
 POSTGREST_PID=$!
 
 echo "[start] starting edge runtime..."
+# --main-service must point at a router entrypoint (main/index.ts), not
+# the parent functions directory — newer edge-runtime versions don't
+# auto-discover subdirectories as routes on their own (confirmed against
+# a live run: "could not find an appropriate entrypoint" without this).
 SUPABASE_URL="http://localhost:8080" \
 SUPABASE_ANON_KEY="$ANON_KEY" \
 SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
 CRON_SECRET="$CRON_SECRET" \
 JWT_SECRET="$JWT_SECRET" \
-  /usr/local/bin/edge-runtime start --main-service /app/functions &
+  /usr/local/bin/edge-runtime start --main-service /app/functions/main &
 EDGE_PID=$!
 
 cleanup() {

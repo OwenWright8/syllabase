@@ -14,7 +14,7 @@ It helps you:
 
 ## Self-hosting
 
-Syllabase is two containers: Postgres, and one `app` container bundling everything else — auth, the REST API, the 5 edge functions, and the frontend, all behind an internal gateway. No external accounts or SaaS dependencies required.
+Syllabase is two containers: `db` (Postgres, extended with a couple of small init scripts GoTrue/PostgREST need — see `Dockerfile.db`), and one `app` container bundling everything else — auth, the REST API, the 5 edge functions, and the frontend, all behind an internal gateway. No external accounts or SaaS dependencies required.
 
 ### Quickstart
 
@@ -23,14 +23,13 @@ Copy this into a `docker-compose.yml`:
 ```yaml
 services:
   db:
-    image: supabase/postgres:15.8.1.049
+    image: ghcr.io/owenwright8/syllabase-db:latest
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXP:-3600}
-    command: ["postgres", "-c", "app.settings.cron_secret=${CRON_SECRET}"]
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:

@@ -14,21 +14,29 @@
 
 services:
   db:
-    image: supabase/postgres:17.6.1.136
+    # Extends supabase/postgres with two extra init scripts baked in at
+    # build time (not bind-mounted) — see Dockerfile.db for why they're
+    # needed (short version: without them, PostgREST/GoTrue can't
+    # authenticate as their dedicated roles). Same image/build split as
+    # `app` below — `docker compose up -d` pulls the prebuilt image by
+    # default, `docker compose build` builds from source if preferred.
+    image: ${SYLLABASE_IMAGE_REPO:-ghcr.io/owenwright8/syllabase}-db:${SYLLABASE_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.db
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXP:-3600}
-    # No `command:` override here on purpose — this image's default
-    # command/entrypoint sets up shared_preload_libraries and other
-    # internal config its own init scripts depend on (pg_stat_statements,
-    # pg_cron, etc.); replacing it (as an earlier version of this file
-    # did, to inject app.settings.cron_secret) breaks that setup with an
-    # opaque "pg_stat_statements must be loaded via shared_preload_libraries"
-    # error during first boot. The cron secret is set via `ALTER DATABASE
-    # ... SET` from the app container's start.sh instead — see there.
+    # No further `command:` override here on purpose — this image's
+    # default command/entrypoint sets up shared_preload_libraries and
+    # other internal config its own init scripts depend on
+    # (pg_stat_statements, pg_cron, etc.); replacing it (an earlier
+    # version of this file did, to inject a custom GUC) breaks that setup
+    # with an opaque "pg_stat_statements must be loaded via
+    # shared_preload_libraries" error during first boot.
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:

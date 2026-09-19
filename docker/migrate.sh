@@ -6,6 +6,7 @@
 set -eu
 
 : "${DATABASE_URL:?DATABASE_URL must be set}"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
   CREATE SCHEMA IF NOT EXISTS supabase_migrations;
@@ -15,7 +16,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
   );
 "
 
-for file in /migrations/*.sql; do
+for file in "$MIGRATIONS_DIR"/*.sql; do
   name="$(basename "$file")"
   version="${name%%_*}"
 

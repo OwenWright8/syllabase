@@ -28,7 +28,8 @@ b64url() {
 }
 
 # Builds an HS256 JWT the same way Supabase's own key generator does, so
-# GoTrue/PostgREST/Kong all accept it as a valid anon/service_role API key.
+# GoTrue/PostgREST/Edge Runtime all accept it as a valid anon/service_role
+# API key.
 make_jwt() {
   role="$1"
   secret="$2"
@@ -64,8 +65,7 @@ set_env "VITE_SUPABASE_PUBLISHABLE_KEY" "$ANON_KEY"
 
 echo "Generated .env with fresh secrets."
 echo
-echo "Now edit .env and set these two to your actual domain(s):"
+echo "Now edit .env and set the one thing that can't be generated for you:"
 echo "  SITE_URL=https://your-domain.example"
-echo "  VITE_SUPABASE_URL=https://api.your-domain.example"
 echo
 echo "Then run: docker compose up -d"

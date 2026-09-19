@@ -63,14 +63,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Docker/GHCR repository names must be lowercase; github.repository_owner
+      # preserves the account's actual casing (e.g. "OwenWright8"), so it
+      # can't be used directly in an image tag.
+      - name: Compute lowercase image namespace
+        run: echo "IMAGE_NAMESPACE=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/syllabase-frontend:${{ inputs.tag || github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/syllabase-frontend:latest
+            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-frontend:${{ inputs.tag || github.ref_name }}
+            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-frontend:latest
 
       - name: Build and push seed-accounts image
         run: |
@@ -82,8 +88,8 @@ jobs:
           EOF
           tag="${{ inputs.tag || github.ref_name }}"
           docker build -f Dockerfile.seed-accounts \
-            -t "ghcr.io/${{ github.repository_owner }}/syllabase-seed-accounts:${tag}" \
-            -t "ghcr.io/${{ github.repository_owner }}/syllabase-seed-accounts:latest" \
+            -t "ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-seed-accounts:${tag}" \
+            -t "ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-seed-accounts:latest" \
             .
-          docker push "ghcr.io/${{ github.repository_owner }}/syllabase-seed-accounts:${tag}"
-          docker push "ghcr.io/${{ github.repository_owner }}/syllabase-seed-accounts:latest"
+          docker push "ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-seed-accounts:${tag}"
+          docker push "ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-seed-accounts:latest"

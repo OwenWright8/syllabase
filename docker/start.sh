@@ -17,20 +17,34 @@ echo "[start] postgres is ready"
 echo "[start] applying migrations..."
 DATABASE_URL="$DB_URL" MIGRATIONS_DIR="/app/migrations" /app/migrate.sh
 
-echo "[start] setting cron secret..."
-# Set at the database level (not via a postgres command-line flag) so it
-# takes effect immediately for new sessions — including the ones pg_cron
-# opens per scheduled run — without needing a server restart, and without
-# touching the db container's own startup command (see docker-compose.yml
-# for why overriding that command broke the image's own init sequence).
+echo "[start] scheduling notification sweep..."
+# (Re)created fresh on every boot with the current CRON_SECRET baked
+# directly into the job's command, rather than read via a Postgres GUC at
+# run time — the `postgres` role in this image isn't a true superuser, so
+# `ALTER DATABASE ... SET app.settings.*` (an earlier approach here) fails
+# with "permission denied to set parameter" (confirmed against a live
+# run). cron.schedule() itself runs fine as `postgres`, and calling it
+# again with the same job name updates the existing job rather than
+# duplicating it, so a secret rotation just needs a container restart.
 #
-# Built as a plain escaped SQL string literal rather than psql's :'var'
-# substitution — that syntax didn't interpolate when passed via -c (it
-# reached Postgres as the literal text ":'cron_secret'", confirmed against
-# a live run), so this escapes single quotes by doubling them instead.
+# Single quotes are doubled to embed safely inside the SQL string
+# literal; the job's own dollar-quote uses a named tag ($cron$) instead
+# of bare $$ so it can't collide with "$$" (bash's own PID) when this
+# heredoc is interpolated.
 CRON_SECRET_SQL=$(printf '%s' "$CRON_SECRET" | sed "s/'/''/g")
-psql "$DB_URL" -v ON_ERROR_STOP=1 \
-  -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.cron_secret = '${CRON_SECRET_SQL}'"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f - <<SQLEOF
+SELECT cron.schedule(
+  'send-notifications-sweep',
+  '*/15 * * * *',
+  \$cron\$
+  SELECT net.http_post(
+    url := 'http://app:8080/functions/v1/send-notifications',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '${CRON_SECRET_SQL}'),
+    body := '{}'::jsonb
+  )
+  \$cron\$
+);
+SQLEOF
 
 echo "[start] writing runtime frontend config..."
 export VITE_SUPABASE_URL="$SITE_URL"

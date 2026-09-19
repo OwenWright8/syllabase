@@ -19,10 +19,17 @@ Syllabase runs entirely on your own infrastructure via Docker Compose — a self
 ### Quickstart
 
 ```sh
-cp .env.example .env
+./setup.sh
 ```
 
-Edit `.env`: set `POSTGRES_PASSWORD`, generate `JWT_SECRET`/`ANON_KEY`/`SERVICE_ROLE_KEY`/`CRON_SECRET`, and set `SITE_URL`/`VITE_SUPABASE_URL` to your actual domain(s). See the comments in `.env.example` for exactly what each value needs to be and how to generate the JWT-based keys.
+This generates `.env` with every secret (`POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `CRON_SECRET`) filled in automatically — no manual key generation. Open `.env` and set the two values that can't be guessed for you:
+
+```
+SITE_URL=https://your-domain.example
+VITE_SUPABASE_URL=https://api.your-domain.example
+```
+
+Then:
 
 ```sh
 docker compose up -d

@@ -39,9 +39,6 @@ jobs:
         with:
           context: .
           push: false
-          build-args: |
-            VITE_SUPABASE_URL=http://localhost:8000
-            VITE_SUPABASE_PUBLISHABLE_KEY=ci-placeholder
 
       - name: Build seed-accounts image
         run: |

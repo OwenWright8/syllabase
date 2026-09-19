@@ -123,6 +123,11 @@ services:
       - "${KONG_HTTP_PORT:-8000}:8000"
 
   seed-accounts:
+    # `image:` lets `docker compose pull` grab the prebuilt release image;
+    # `build:` is the fallback `docker compose build` uses if you'd rather
+    # build from source. Override SYLLABASE_IMAGE_REPO/SYLLABASE_VERSION
+    # in .env to pull from your own fork's registry instead.
+    image: ${SYLLABASE_IMAGE_REPO:-ghcr.io/owenwright8/syllabase}-seed-accounts:${SYLLABASE_VERSION:-latest}
     build:
       context: .
       dockerfile_inline: |
@@ -145,16 +150,22 @@ services:
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
 
   frontend:
+    # Same image/build split as seed-accounts above. VITE_SUPABASE_URL and
+    # VITE_SUPABASE_PUBLISHABLE_KEY are passed at runtime (not build args)
+    # since the entrypoint injects them into env.js at container start —
+    # see Dockerfile and docker/40-inject-env.sh — which is what makes one
+    # prebuilt image usable across everyone's own domain/keys.
+    image: ${SYLLABASE_IMAGE_REPO:-ghcr.io/owenwright8/syllabase}-frontend:${SYLLABASE_VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
     restart: unless-stopped
     depends_on:
       - kong
       - seed-accounts
+    environment:
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
     ports:
       - "${FRONTEND_PORT:-8080}:80"
 

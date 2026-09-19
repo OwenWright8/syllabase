@@ -57,12 +57,67 @@ jobs:
           echo "App never came up"
           exit 1
 
-      - name: Check instance-status function responds (exercises db + postgrest + edge runtime + nginx together)
+      # nginx serves the static frontend even when a backend has crashed, so
+      # "the page loads" proves very little. Everything below exercises the
+      # real user flow end to end: GoTrue up (it runs its own long
+      # migration set on first boot), the first-run status check, sign up,
+      # log in, and the status check flipping once an account exists. An
+      # earlier version of this job only hit instance-status and so passed
+      # while GoTrue was crashing on startup and every signup 502'd.
+      - name: Wait for GoTrue (auth) to come up
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8080/auth/v1/health >/dev/null; then
+              echo "GoTrue healthy after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "GoTrue never became healthy"
+          exit 1
+
+      - name: Fresh instance reports no accounts yet
         run: |
           ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
-          curl -fsS http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" \
-            -H "Authorization: Bearer ${ANON_KEY}"
+          body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
+            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+          echo "$body"
+          echo "$body" | grep -q '"hasAccounts":false'
+
+      - name: Sign up
+        run: |
+          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
+          code=$(curl -sS -o signup.json -w '%{http_code}' -X POST http://localhost:8080/auth/v1/signup \
+            -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+            -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')
+          echo "HTTP ${code}"; cat signup.json; echo
+          [ "$code" = "200" ]
+          grep -q '"access_token"' signup.json
+
+      - name: Log in
+        run: |
+          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
+          code=$(curl -sS -o login.json -w '%{http_code}' -X POST \
+            "http://localhost:8080/auth/v1/token?grant_type=password" \
+            -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+            -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')
+          echo "HTTP ${code}"
+          [ "$code" = "200" ]
+          grep -q '"access_token"' login.json
+
+      - name: Instance now reports an account exists (signup trigger + PostgREST + edge runtime)
+        run: |
+          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
+          body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
+            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+          echo "$body"
+          echo "$body" | grep -q '"hasAccounts":true'
+
+      - name: Startup diagnostics
+        if: always()
+        run: |
+          echo "=== app startup markers ==="
+          docker compose logs app | grep -E "\[start\]|auth function owner|FATAL|fatal" || true
 
       - name: Dump logs on failure
         if: failure()

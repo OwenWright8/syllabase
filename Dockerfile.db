@@ -1,0 +1,12 @@
+# Extends the base Postgres image with two extra init scripts Supabase's
+# own self-hosting reference mounts in but the plain supabase/postgres
+# image doesn't include on its own — without them, authenticator/
+# supabase_auth_admin (the roles PostgREST/GoTrue connect as) never get
+# their password set to POSTGRES_PASSWORD, and those services fail with
+# "password authentication failed" (confirmed against a live run). Baked
+# into the image (not bind-mounted) so a self-hoster only needs
+# docker-compose.yml + .env, not a full repo checkout, to run this.
+FROM supabase/postgres:17.6.1.136
+
+COPY docker/init/roles.sql /docker-entrypoint-initdb.d/init-scripts/99-roles.sql
+COPY docker/init/jwt.sql /docker-entrypoint-initdb.d/init-scripts/99-jwt.sql

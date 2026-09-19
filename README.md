@@ -31,7 +31,7 @@ Edit `accounts.env`: list the username/password pairs for whoever should have an
 docker compose up -d
 ```
 
-That's it — Postgres, auth, the REST API, the 4 edge functions, and the frontend all come up together, migrations apply automatically, and your accounts get created.
+That's it — Postgres, auth, the REST API, the 4 edge functions, and the frontend all come up together, migrations apply automatically, and your accounts get created. `frontend` and `seed-accounts` pull prebuilt images from GHCR by default (published by the [Release workflow](.github/workflows/release.yml) on every tagged version) — nothing to build yourself unless you want to. Run `docker compose build` instead if you'd rather build from source, or are working from an unreleased commit.
 
 ### Resetting a password
 
@@ -42,10 +42,6 @@ docker compose up -d seed-accounts
 ```
 
 No email, no SMTP server, no admin panel — editing the file *is* the reset mechanism.
-
-### Granting yourself admin
-
-After your account exists, run one query against the database (see the comment in `supabase/migrations/20260118210013_...sql` for the exact statement) to grant the `admin` role to your seeded account.
 
 ### Notifications (optional)
 

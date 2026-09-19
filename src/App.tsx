@@ -21,7 +21,6 @@ const CourseDetail = lazy(() => import("./pages/CourseDetail"));
 const Exams = lazy(() => import("./pages/Exams"));
 const Archive = lazy(() => import("./pages/Archive"));
 const Profile = lazy(() => import("./pages/Profile"));
-const Admin = lazy(() => import("./pages/Admin"));
 const Readings = lazy(() => import("./pages/Readings"));
 const Study = lazy(() => import("./pages/Study"));
 const Planner = lazy(() => import("./pages/Planner"));
@@ -106,14 +105,6 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Profile />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin"
-                  element={
-                    <ProtectedRoute>
-                      <Admin />
                     </ProtectedRoute>
                   }
                 />

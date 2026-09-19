@@ -31,9 +31,6 @@ FOR SELECT
 TO authenticated
 USING (public.has_role(auth.uid(), 'admin'));
 
--- No admin seed here on purpose: migrations should be environment-agnostic.
--- Whoever runs this instance grants their own admin role as a one-time
--- manual post-deploy step, e.g.:
---   INSERT INTO public.user_roles (user_id, role)
---   SELECT id, 'admin'::app_role FROM auth.users WHERE email = '<your seeded account>@accounts.local'
---   ON CONFLICT (user_id, role) DO NOTHING;
+-- (This whole role system is later dropped by 20260918130000_drop_admin_role_system —
+-- it turned out to have no real use once each deployment is a single
+-- self-hosted instance rather than multi-tenant SaaS.)

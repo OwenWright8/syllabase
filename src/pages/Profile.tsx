@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useAdmin } from "@/hooks/useAdmin";
 import { PushoverNotificationSettings } from "@/components/notifications/PushoverNotificationSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +13,7 @@ import { format, parseISO } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { useNavigate } from "react-router-dom";
 import { applyColorTheme, colorThemes } from "@/lib/colorThemes";
-import { Shield, Clock, CalendarDays } from "lucide-react";
+import { Clock, CalendarDays } from "lucide-react";
 import { WidgetApiKeySection } from "@/components/WidgetApiKeySection";
 import {
   AlertDialog,
@@ -39,7 +38,6 @@ interface Profile {
 export default function Profile() {
   const { user, signOut } = useAuth();
   const { theme, setTheme, setColorTheme: updateContextColorTheme } = useTheme();
-  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [timezone, setTimezone] = useState("America/New_York");
@@ -319,16 +317,6 @@ export default function Profile() {
               <Clock className="h-4 w-4" />
               Archive
             </Button>
-            {isAdmin && (
-              <Button 
-                onClick={() => navigate("/admin")} 
-                variant="outline"
-                className="gap-2 rounded-xl"
-              >
-                <Shield className="h-4 w-4" />
-                Admin
-              </Button>
-            )}
           </div>
         </div>
 

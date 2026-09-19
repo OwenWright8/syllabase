@@ -4,9 +4,9 @@ name: Release
 #   git tag v1.0.0 && git push origin v1.0.0
 # Creates a GitHub Release (source code archives attached, notes
 # auto-generated from merged PRs/commits since the last tag) and builds +
-# pushes the frontend image to GHCR, tagged with both the release version
-# and `latest` — this is what makes `docker compose up -d` work for
-# anyone without them building anything themselves.
+# pushes the all-in-one app image to GHCR, tagged with both the release
+# version and `latest` — this is what makes `docker compose up -d` work
+# for anyone without them building anything themselves.
 
 on:
   push:
@@ -69,11 +69,11 @@ jobs:
       - name: Compute lowercase image namespace
         run: echo "IMAGE_NAMESPACE=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      - name: Build and push frontend image
+      - name: Build and push app image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-frontend:${{ inputs.tag || github.ref_name }}
-            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-frontend:latest
+            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase:${{ inputs.tag || github.ref_name }}
+            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase:latest

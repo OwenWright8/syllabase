@@ -8,7 +8,7 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
-  // Self-hosters point VITE_SUPABASE_URL at their own Kong gateway domain —
+  // Self-hosters point VITE_SUPABASE_URL at their own gateway domain —
   // derive dev-server/PWA-caching config from it instead of hardcoding any
   // one deployment's domain, so this works out of the box for anyone.
   const apiOrigin = (() => {
@@ -69,7 +69,7 @@ export default defineConfig(({ mode }) => {
           ? [
               {
                 // Matches whichever API origin this deployment's own
-                // VITE_SUPABASE_URL points at (self-hosted Kong gateway or
+                // VITE_SUPABASE_URL points at (self-hosted gateway or
                 // Supabase Cloud) rather than a single hardcoded domain.
                 urlPattern: new RegExp(`^${apiOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/.*`, "i"),
                 handler: 'NetworkFirst',

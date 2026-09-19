@@ -34,7 +34,7 @@ jobs:
         run: |
           docker compose config >/dev/null
 
-      - name: Build frontend image
+      - name: Build app image
         uses: docker/build-push-action@v6
         with:
           context: .

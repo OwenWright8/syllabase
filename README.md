@@ -14,19 +14,64 @@ It helps you:
 
 ## Self-hosting
 
-Syllabase runs entirely on your own infrastructure via Docker Compose — a self-hosted Supabase stack (Postgres, auth, REST API, edge functions) plus the frontend, no external accounts or SaaS dependencies required.
+Syllabase is two containers: Postgres, and one `app` container bundling everything else — auth, the REST API, the 5 edge functions, and the frontend, all behind an internal gateway. No external accounts or SaaS dependencies required.
 
 ### Quickstart
+
+Copy this into a `docker-compose.yml`:
+
+```yaml
+services:
+  db:
+    image: supabase/postgres:15.8.1.049
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXP: ${JWT_EXP:-3600}
+    command: ["postgres", "-c", "app.settings.cron_secret=${CRON_SECRET}"]
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    image: ghcr.io/owenwright8/syllabase:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXP: ${JWT_EXP:-3600}
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+      SITE_URL: ${SITE_URL}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  db-data:
+```
+
+Then grab [`.env.example`](.env.example) and [`setup.sh`](setup.sh) next to it (or just clone the repo, which already has all three), and run:
 
 ```sh
 ./setup.sh
 ```
 
-This generates `.env` with every secret (`POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `CRON_SECRET`) filled in automatically — no manual key generation. Open `.env` and set the two values that can't be guessed for you:
+This generates `.env` with every secret (`POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `CRON_SECRET`) filled in automatically — no manual JWT signing. Open `.env` and set the one value that can't be guessed for you:
 
 ```
 SITE_URL=https://your-domain.example
-VITE_SUPABASE_URL=https://api.your-domain.example
 ```
 
 Then:
@@ -35,7 +80,7 @@ Then:
 docker compose up -d
 ```
 
-That's it — Postgres, auth, the REST API, the 5 edge functions, and the frontend all come up together, and migrations apply automatically. `frontend` pulls a prebuilt image from GHCR by default (published by the [Release workflow](.github/workflows/release.yml) on every tagged version) — nothing to build yourself unless you want to. Run `docker compose build` instead if you'd rather build from source, or are working from an unreleased commit.
+That's it — `app` pulls the prebuilt image from GHCR by default (published by the [Release workflow](.github/workflows/release.yml) on every tagged version), Postgres comes up alongside it, and migrations apply automatically on first boot. If you'd rather build from source, swap `image:` for `build: { context: ., dockerfile: Dockerfile }` (or just run `docker compose build` from a full checkout, which the repo's own `docker-compose.yml` is already set up for).
 
 Visit the site: since this is a fresh instance with no accounts yet, you'll be prompted to create one. Every visit after that shows the normal sign in / sign up screen — anyone with the URL can create their own account and their own private data (there's no email verification since there's no SMTP server involved), so keep that in mind if you're putting this on the open internet rather than behind a VPN/private network.
 
@@ -83,5 +128,5 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 
 - **Frontend**: React + TypeScript + Vite
 - **UI**: Tailwind CSS + shadcn/ui
-- **Backend / DB**: Self-hosted Supabase (Postgres + GoTrue auth + PostgREST + Edge Functions), fronted by Kong
-- **Deployment**: Docker Compose
+- **Backend / DB**: Self-hosted Supabase-compatible stack (Postgres + GoTrue auth + PostgREST + Edge Functions), with nginx as the internal gateway
+- **Deployment**: Docker Compose (2 containers: Postgres + one all-in-one app container)

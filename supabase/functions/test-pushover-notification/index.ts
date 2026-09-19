@@ -4,8 +4,8 @@
 // need to know which user is testing (each user brings their own app
 // token), but to keep this from being an open relay for arbitrary Pushover
 // credentials. Verified in-code (via GoTrue) rather than left to gateway
-// config, so this holds regardless of how the deployment's Kong/edge
-// runtime is set up.
+// config, so this holds regardless of how the deployment's internal
+// gateway/edge runtime is set up.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.81.1'
 
 const corsHeaders = {

@@ -31,11 +31,43 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate docker-compose.yml
-        run: |
-          docker compose config >/dev/null
+        run: docker compose config >/dev/null
 
-      - name: Build app image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
+      - name: Generate .env for the smoke test
+        run: |
+          ./setup.sh
+          sed -i 's|^SITE_URL=.*|SITE_URL=http://localhost:8080|' .env
+
+      # This is the real test: build from source and actually run the full
+      # stack (db + app), not just confirm the image builds — a clean build
+      # doesn't guarantee gotrue/postgrest/edge-runtime actually start and
+      # talk to each other correctly inside the merged container.
+      - name: Build and start the stack
+        run: docker compose up -d --build
+
+      - name: Wait for the app to come up
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8080/ >/dev/null; then
+              echo "App responded after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "App never came up"
+          exit 1
+
+      - name: Check instance-status function responds (exercises db + postgrest + edge runtime + nginx together)
+        run: |
+          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
+          curl -fsS http://localhost:8080/functions/v1/instance-status \
+            -H "apikey: ${ANON_KEY}" \
+            -H "Authorization: Bearer ${ANON_KEY}"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

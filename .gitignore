@@ -16,7 +16,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
-accounts.env
 
 # Playwright
 /test-results/

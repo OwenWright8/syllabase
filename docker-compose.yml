@@ -1,9 +1,10 @@
 # Self-hosted Syllabase stack: Postgres + GoTrue (auth) + PostgREST (REST
-# API) + Kong (single gateway) + Edge Runtime (the app's 4 remaining
-# functions) + the static frontend, plus two one-shot setup services
-# (migrate, seed-accounts) that make `docker compose up -d` a complete,
-# repeatable deploy — including "resetting" a password, which is just
-# editing accounts.env and running this again.
+# API) + Kong (single gateway) + Edge Runtime (the app's 5 functions) + the
+# static frontend, plus a one-shot `migrate` service so `docker compose up
+# -d` is a complete, repeatable deploy. Accounts are created in-app: the
+# first visit to a fresh instance prompts you to create an account, and
+# every visit after that shows the normal sign in / sign up screen (see
+# src/pages/Auth.tsx and the instance-status function).
 #
 # Deliberately NOT included: Realtime, Storage, ImgProxy (the app uses
 # none of them) and Studio (optional — see the commented service below).
@@ -69,10 +70,11 @@ services:
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_JWT_ADMIN_ROLES: service_role
-      # The whole point of this deployment model: no public signup, no
-      # email flows, no SMTP dependency at all. Accounts come from
-      # seed-accounts only.
-      GOTRUE_DISABLE_SIGNUP: "true"
+      # Signup is open (the app itself gates the UI: only a brand-new
+      # instance with zero accounts shows a signup-style form by default).
+      # Still no SMTP dependency — accounts are auto-confirmed since there's
+      # no mail server to send a confirmation link through.
+      GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_MAILER_AUTOCONFIRM: "true"
 
   rest:
@@ -122,39 +124,15 @@ services:
     ports:
       - "${KONG_HTTP_PORT:-8000}:8000"
 
-  seed-accounts:
+  frontend:
     # `image:` lets `docker compose pull` grab the prebuilt release image;
     # `build:` is the fallback `docker compose build` uses if you'd rather
-    # build from source. Override SYLLABASE_IMAGE_REPO/SYLLABASE_VERSION
-    # in .env to pull from your own fork's registry instead.
-    image: ${SYLLABASE_IMAGE_REPO:-ghcr.io/owenwright8/syllabase}-seed-accounts:${SYLLABASE_VERSION:-latest}
-    build:
-      context: .
-      dockerfile_inline: |
-        FROM node:20-alpine
-        WORKDIR /app
-        COPY docker/seed-accounts.mjs .
-        CMD ["node", "seed-accounts.mjs"]
-    depends_on:
-      - auth
-    env_file:
-      # Separate from .env on purpose — accounts.env is the one file you
-      # touch to add a user or reset a password, kept apart from the
-      # deployment-wide secrets in .env. Optional so `docker compose
-      # config`/`up` doesn't hard-fail before you've copied
-      # accounts.env.example to accounts.env.
-      - path: accounts.env
-        required: false
-    environment:
-      GOTRUE_URL: http://auth:9999
-      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
-
-  frontend:
-    # Same image/build split as seed-accounts above. VITE_SUPABASE_URL and
-    # VITE_SUPABASE_PUBLISHABLE_KEY are passed at runtime (not build args)
-    # since the entrypoint injects them into env.js at container start —
-    # see Dockerfile and docker/40-inject-env.sh — which is what makes one
-    # prebuilt image usable across everyone's own domain/keys.
+    # build from source. Override SYLLABASE_IMAGE_REPO/SYLLABASE_VERSION in
+    # .env to pull from your own fork's registry instead. VITE_SUPABASE_URL
+    # and VITE_SUPABASE_PUBLISHABLE_KEY are passed at runtime (not build
+    # args) since the entrypoint injects them into env.js at container
+    # start — see Dockerfile and docker/40-inject-env.sh — which is what
+    # makes one prebuilt image usable across everyone's own domain/keys.
     image: ${SYLLABASE_IMAGE_REPO:-ghcr.io/owenwright8/syllabase}-frontend:${SYLLABASE_VERSION:-latest}
     build:
       context: .
@@ -162,7 +140,6 @@ services:
     restart: unless-stopped
     depends_on:
       - kong
-      - seed-accounts
     environment:
       VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}

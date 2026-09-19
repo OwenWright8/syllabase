@@ -4,16 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
 import { EASE_OUT } from "@/lib/motion";
 
 export default function Auth() {
+  const [checkingSetup, setCheckingSetup] = useState(true);
+  const [isFirstRun, setIsFirstRun] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, user } = useAuth();
+  const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,17 +26,51 @@ export default function Auth() {
     }
   }, [user, navigate]);
 
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("instance-status");
+        if (error) throw error;
+        setIsFirstRun(!data?.hasAccounts);
+      } catch (error) {
+        // If the check itself fails, default to the normal sign-in screen
+        // rather than blocking access entirely.
+        console.error("Failed to check instance status:", error);
+        setIsFirstRun(false);
+      } finally {
+        setCheckingSetup(false);
+      }
+    };
+    checkSetup();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { error } = await signIn(username, password);
-      if (error) {
-        if (error.message.includes("Invalid login credentials")) {
-          toast.error("Invalid username or password.");
+      if (isFirstRun || !isLogin) {
+        const { error } = await signUp(username, password);
+        if (error) {
+          if (error.message.includes("already registered") || error.message.includes("already been registered")) {
+            toast.error("That username is taken. Try signing in instead.");
+            setIsLogin(true);
+          } else {
+            toast.error(error.message);
+          }
+        } else if (isFirstRun) {
+          toast.success("Account created! Welcome to Syllabase.");
         } else {
-          toast.error(error.message);
+          toast.success("Account created!");
+        }
+      } else {
+        const { error } = await signIn(username, password);
+        if (error) {
+          if (error.message.includes("Invalid login credentials")) {
+            toast.error("Invalid username or password.");
+          } else {
+            toast.error(error.message);
+          }
         }
       }
     } catch (error) {
@@ -41,6 +79,16 @@ export default function Auth() {
       setLoading(false);
     }
   };
+
+  if (checkingSetup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  const showSignUpFields = isFirstRun || !isLogin;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -60,9 +108,15 @@ export default function Auth() {
             >
               <BookOpen className="h-8 w-8 text-primary-foreground" />
             </motion.div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              {isFirstRun ? "Welcome to Syllabase" : showSignUpFields ? "Create an account" : "Welcome back"}
+            </h1>
             <p className="text-muted-foreground mt-1">
-              Sign in to access your study planner
+              {isFirstRun
+                ? "Create the first account to set up this instance"
+                : showSignUpFields
+                ? "Start organizing your study schedule"
+                : "Sign in to access your study planner"}
             </p>
           </div>
 
@@ -86,12 +140,13 @@ export default function Auth() {
               <Input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={showSignUpFields ? "new-password" : "current-password"}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1 h-12 rounded-xl"
                 required
+                minLength={6}
               />
             </div>
             <Button
@@ -99,14 +154,30 @@ export default function Auth() {
               className="w-full h-12 rounded-xl text-base font-medium"
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading
+                ? showSignUpFields
+                  ? "Creating account..."
+                  : "Signing in..."
+                : isFirstRun
+                ? "Create account"
+                : showSignUpFields
+                ? "Sign Up"
+                : "Sign In"}
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Accounts are set up by whoever runs this instance. Ask your administrator
-            if you need an account or a password reset.
-          </p>
+          {/* Toggle — hidden on first run, there's nothing to sign in to yet */}
+          {!isFirstRun && (
+            <div className="mt-6 text-center text-sm">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                onClick={() => setIsLogin(!isLogin)}
+                className="text-primary hover:underline font-medium"
+              >
+                {isLogin ? "Sign up" : "Sign in"}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* App name */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PushoverNotificationSettings } from "@/components/notifications/PushoverNotificationSettings";
@@ -45,28 +45,6 @@ export default function Profile() {
   const [themePreference, setThemePreference] = useState<"light" | "dark" | "system">("system");
   const [semesterStart, setSemesterStart] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [secretThemeUnlocked, setSecretThemeUnlocked] = useState(
-    () => localStorage.getItem("acnl-theme-unlocked") === "true"
-  );
-  const secretClickCount = useRef(0);
-  const secretClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleColorPaletteLabelClick = () => {
-    if (secretThemeUnlocked) return;
-
-    secretClickCount.current += 1;
-    if (secretClickTimer.current) clearTimeout(secretClickTimer.current);
-    secretClickTimer.current = setTimeout(() => {
-      secretClickCount.current = 0;
-    }, 1200);
-
-    if (secretClickCount.current >= 5) {
-      secretClickCount.current = 0;
-      setSecretThemeUnlocked(true);
-      localStorage.setItem("acnl-theme-unlocked", "true");
-      toast.success("🍃 You dug up a secret palette: New Leaf!");
-    }
-  };
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Password change state
@@ -388,11 +366,7 @@ export default function Profile() {
                 </Select>
               </div>
               <div>
-                <Label
-                  htmlFor="colorTheme"
-                  className="text-sm select-none"
-                  onClick={handleColorPaletteLabelClick}
-                >
+                <Label htmlFor="colorTheme" className="text-sm">
                   Color Palette
                 </Label>
                 <Select value={colorTheme} onValueChange={setColorTheme}>
@@ -401,7 +375,6 @@ export default function Profile() {
                   </SelectTrigger>
                   <SelectContent>
                     {Object.values(colorThemes)
-                      .filter((theme) => !theme.hidden || secretThemeUnlocked || theme.name === colorTheme)
                       .map((theme) => (
                         <SelectItem key={theme.name} value={theme.name}>
                           <div className="flex items-center gap-2">

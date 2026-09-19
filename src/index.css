@@ -17,7 +17,7 @@ All colors MUST be HSL.
     --popover: 40 25% 99%;
     --popover-foreground: 30 15% 15%;
 
-    --primary: 150 22% 30%;
+    --primary: 100 38% 40%;
     --primary-foreground: 40 30% 98%;
 
     --secondary: 36 30% 92%;
@@ -26,7 +26,7 @@ All colors MUST be HSL.
     --muted: 38 22% 94%;
     --muted-foreground: 30 9% 45%;
 
-    --accent: 28 52% 46%;
+    --accent: 28 42% 42%;
     --accent-foreground: 40 30% 98%;
 
     --destructive: 5 50% 44%;
@@ -34,7 +34,7 @@ All colors MUST be HSL.
 
     --border: 35 18% 87%;
     --input: 35 18% 90%;
-    --ring: 150 22% 30%;
+    --ring: 100 38% 40%;
 
     --radius: 0.75rem;
 
@@ -46,10 +46,10 @@ All colors MUST be HSL.
     --info-foreground: 40 30% 98%;
 
     /* Personalization accents (overridden at runtime by the color theme picker) */
-    --purple: 265 20% 45%;
-    --pink: 350 30% 55%;
-    --orange: 28 52% 48%;
-    --teal: 175 25% 38%;
+    --purple: 265 35% 68%;
+    --pink: 340 55% 75%;
+    --orange: 25 65% 55%;
+    --teal: 195 45% 48%;
 
     /* Natural, neutral-toned shadows */
     --shadow-sm: 0 1px 2px hsl(30 20% 12% / 0.06);
@@ -67,7 +67,7 @@ All colors MUST be HSL.
     --popover: 30 8% 12%;
     --popover-foreground: 38 18% 92%;
 
-    --primary: 150 22% 56%;
+    --primary: 100 32% 55%;
     --primary-foreground: 30 12% 10%;
 
     --secondary: 30 8% 17%;
@@ -76,7 +76,7 @@ All colors MUST be HSL.
     --muted: 30 8% 15%;
     --muted-foreground: 35 8% 60%;
 
-    --accent: 28 45% 58%;
+    --accent: 28 38% 55%;
     --accent-foreground: 30 12% 10%;
 
     --destructive: 5 45% 55%;
@@ -84,7 +84,7 @@ All colors MUST be HSL.
 
     --border: 30 8% 21%;
     --input: 30 8% 18%;
-    --ring: 150 22% 56%;
+    --ring: 100 32% 55%;
 
     --success: 150 28% 50%;
     --success-foreground: 30 12% 10%;
@@ -93,10 +93,10 @@ All colors MUST be HSL.
     --info: 205 28% 60%;
     --info-foreground: 30 12% 10%;
 
-    --purple: 265 18% 62%;
-    --pink: 350 25% 65%;
-    --orange: 28 45% 58%;
-    --teal: 175 22% 50%;
+    --purple: 265 30% 70%;
+    --pink: 340 50% 72%;
+    --orange: 25 55% 60%;
+    --teal: 195 40% 55%;
 
     --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.25);
     --shadow-md: 0 2px 10px -2px hsl(0 0% 0% / 0.35);

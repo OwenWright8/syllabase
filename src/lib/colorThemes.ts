@@ -1,8 +1,6 @@
 export interface ColorTheme {
   name: string;
   label: string;
-  /** Not shown in the normal theme picker — unlocked via an easter egg. */
-  hidden?: boolean;
   colors: {
     light: {
       primary: string;
@@ -24,25 +22,27 @@ export interface ColorTheme {
 }
 
 export const colorThemes: Record<string, ColorTheme> = {
+  // Palette based on Animal Crossing: New Leaf — leaf green, Tom Nook brown,
+  // hydrangea purple, cherry-blossom pink, acorn orange, and river blue.
   sage: {
     name: 'sage',
     label: 'Sage',
     colors: {
       light: {
-        primary: '150 22% 30%',
-        accent: '28 52% 46%',
-        purple: '265 20% 45%',
-        pink: '350 30% 55%',
-        orange: '28 52% 48%',
-        teal: '175 25% 38%',
+        primary: '100 38% 40%',
+        accent: '28 42% 42%',
+        purple: '265 35% 68%',
+        pink: '340 55% 75%',
+        orange: '25 65% 55%',
+        teal: '195 45% 48%',
       },
       dark: {
-        primary: '150 22% 56%',
-        accent: '28 45% 58%',
-        purple: '265 18% 62%',
-        pink: '350 25% 65%',
-        orange: '28 45% 58%',
-        teal: '175 22% 50%',
+        primary: '100 32% 55%',
+        accent: '28 38% 55%',
+        purple: '265 30% 70%',
+        pink: '340 50% 72%',
+        orange: '25 55% 60%',
+        teal: '195 40% 55%',
       },
     },
   },
@@ -175,33 +175,6 @@ export const colorThemes: Record<string, ColorTheme> = {
         pink: '170 72% 53%',
         orange: '180 75% 55%',
         teal: '180 75% 55%',
-      },
-    },
-  },
-  // Hidden easter-egg theme — unlocked from the Profile page, not shown in
-  // the normal picker. Palette based on Animal Crossing: New Leaf — leaf
-  // green, Tom Nook brown, hydrangea purple, cherry-blossom pink, acorn
-  // orange, and river blue.
-  animalcrossing: {
-    name: 'animalcrossing',
-    label: 'New Leaf 🍃',
-    hidden: true,
-    colors: {
-      light: {
-        primary: '100 38% 40%',
-        accent: '28 42% 42%',
-        purple: '265 35% 68%',
-        pink: '340 55% 75%',
-        orange: '25 65% 55%',
-        teal: '195 45% 48%',
-      },
-      dark: {
-        primary: '100 32% 55%',
-        accent: '28 38% 55%',
-        purple: '265 30% 70%',
-        pink: '340 50% 72%',
-        orange: '25 55% 60%',
-        teal: '195 40% 55%',
       },
     },
   },

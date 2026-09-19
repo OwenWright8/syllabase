@@ -19,12 +19,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXP:-3600}
-    # Sets the GUC the notification-cron migration reads its header secret
-    # from, so no secret needs to live in a SQL file.
-    command:
-      - postgres
-      - -c
-      - app.settings.cron_secret=${CRON_SECRET}
+    # No `command:` override here on purpose — this image's default
+    # command/entrypoint sets up shared_preload_libraries and other
+    # internal config its own init scripts depend on (pg_stat_statements,
+    # pg_cron, etc.); replacing it (as an earlier version of this file
+    # did, to inject app.settings.cron_secret) breaks that setup with an
+    # opaque "pg_stat_statements must be loaded via shared_preload_libraries"
+    # error during first boot. The cron secret is set via `ALTER DATABASE
+    # ... SET` from the app container's start.sh instead — see there.
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:

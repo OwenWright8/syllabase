@@ -5,13 +5,14 @@
 -- gets the same behavior automatically.
 --
 -- The secret is read from a Postgres setting rather than hardcoded here,
--- so no credential lives in a version-controlled file. docker-compose.yml
--- sets it on the `db` service at startup (`-c app.settings.cron_secret=...`,
--- sourced from CRON_SECRET), matching the same secret the `app` container's
--- edge runtime checks incoming requests against. The URL below hits the
--- `app` service's internal nginx gateway (Docker Compose's built-in DNS
--- resolves the "app" hostname to that container) on the port it listens
--- on inside the compose network.
+-- so no credential lives in a version-controlled file. The `app`
+-- container's start.sh sets it via `ALTER DATABASE ... SET
+-- app.settings.cron_secret = ...` (sourced from the CRON_SECRET env var)
+-- right after migrations apply, matching the same secret the `app`
+-- container's edge runtime checks incoming requests against. The URL
+-- below hits the `app` service's internal nginx gateway (Docker
+-- Compose's built-in DNS resolves the "app" hostname to that container)
+-- on the port it listens on inside the compose network.
 CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 

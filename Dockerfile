@@ -5,16 +5,24 @@
 # Postgres itself stays in its own container (docker-compose.yml) for
 # clean data-volume/backup semantics.
 #
-# CAUTION — verify before relying on this in production: the COPY lines
-# below pull compiled binaries out of each upstream project's own image
-# at these specific paths. Those paths are this Dockerfile's best-effort
-# guess (matching each project's typical layout), not something that has
-# been confirmed against a live build in this environment. If a COPY step
-# fails, find the real path with e.g.:
-#   docker run --rm --entrypoint find supabase/gotrue:v2.170.0 / -maxdepth 3 -iname '*gotrue*'
-# and fix the corresponding COPY line below. Also re-verify these image
-# tags exist for your host's architecture (`docker manifest inspect
-# <image>:<tag>`) before building on ARM (e.g. a Raspberry Pi).
+# Image versions below (gotrue/postgrest/edge-runtime, and postgres in
+# docker-compose.yml) are pinned to match Supabase's own official
+# self-hosting reference compose (supabase/supabase docker/docker-compose.yml)
+# as of Sept 2026 — earlier versions of this Dockerfile picked
+# independent versions of each that turned out to be mutually
+# incompatible (confirmed live: GoTrue's own internal schema migrations
+# failed against a mismatched postgres baseline). Verify against that
+# reference before bumping any one of these independently — they're
+# released and tested as a coordinated set, not individually.
+#
+# The COPY lines below pull compiled binaries out of each upstream
+# project's own image at these specific paths — confirmed working via a
+# live GitHub Actions build/run of this exact Dockerfile, but re-verify
+# if you bump versions and a COPY step starts failing:
+#   docker run --rm --entrypoint find supabase/gotrue:<tag> / -maxdepth 3 -iname '*gotrue*'
+# Also re-verify these images exist for your host's architecture
+# (`docker manifest inspect <image>:<tag>`) before building on ARM (e.g.
+# a Raspberry Pi) — only confirmed on linux/amd64 so far.
 
 FROM node:20-alpine AS frontend-build
 WORKDIR /app
@@ -23,9 +31,9 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM supabase/gotrue:v2.170.0 AS gotrue-src
-FROM postgrest/postgrest:v12.2.3 AS postgrest-src
-FROM supabase/edge-runtime:v1.65.1 AS edge-runtime-src
+FROM supabase/gotrue:v2.196.0 AS gotrue-src
+FROM postgrest/postgrest:v14.17 AS postgrest-src
+FROM supabase/edge-runtime:v1.76.2 AS edge-runtime-src
 
 FROM nginx:1.27-bookworm
 

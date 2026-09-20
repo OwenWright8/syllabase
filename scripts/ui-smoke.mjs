@@ -37,12 +37,14 @@ await page.locator("#password").fill(PASS);
 await page.getByRole("button", { name: "Sign In" }).click();
 await page.waitForURL(`${BASE}/`, { timeout: 20000 }).catch(() => fail("sign-in did not reach the Today page"));
 
-console.log("2. Profile shows a real widget URL, not 'undefined/...'");
+console.log("2. Generating a widget key shows a real URL in the snippet, not 'undefined/...'");
 await page.goto(`${BASE}/profile`);
-await page.getByText("type: customapi").waitFor({ timeout: 20000 }).catch(() => fail("Profile page / widget snippet never rendered"));
-const body = await page.textContent("body");
-if (body.includes("undefined/functions")) await fail("widget URL contains 'undefined/functions'");
-if (!body.includes(`url: ${BASE}/functions/v1/widget-stats`)) await fail(`widget URL is not ${BASE}/functions/v1/widget-stats`);
+await page.getByRole("button", { name: "Generate Key" }).click({ timeout: 20000 }).catch(() => fail("Profile page / 'Generate Key' button never appeared"));
+// The snippet lives in a collapsed <details>, so read it from the DOM rather than waiting for visibility.
+await page.locator("details pre").waitFor({ state: "attached", timeout: 20000 }).catch(() => fail("widget snippet never rendered after generating a key"));
+const snippet = await page.locator("details pre").textContent();
+if (snippet.includes("undefined/functions")) await fail("widget URL contains 'undefined/functions'");
+if (!snippet.includes(`url: ${BASE}/functions/v1/widget-stats`)) await fail(`widget URL is not ${BASE}/functions/v1/widget-stats`);
 
 console.log("3. Delete Account calls the right URL and succeeds");
 const deleteResponse = page.waitForResponse((r) => r.url().includes("delete-user"), { timeout: 20000 });

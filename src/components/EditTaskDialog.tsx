@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format, addDays } from "date-fns";
+import { format, addDays, parseISO } from "date-fns";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatInTimezone, parseInTimezone, getTodayInTimezone } from "@/lib/dateUtils";
 
@@ -67,7 +67,10 @@ export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess }:
     } else {
       // Reset form for new task
       const today = getTodayInTimezone(timezone);
-      const tomorrow = format(addDays(new Date(today), 1), "yyyy-MM-dd");
+      // parseISO reads a bare "yyyy-MM-dd" as a local calendar date. `new Date()`
+      // would read it as UTC midnight, which is the previous evening anywhere
+      // west of UTC and shifted these defaults back a day.
+      const tomorrow = format(addDays(parseISO(today), 1), "yyyy-MM-dd");
       setFormData({
         title: "",
         description: "",
@@ -90,7 +93,7 @@ export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess }:
     // If work_date is empty, set it to the day before due_date
     let workDate = formData.workDate;
     if (!workDate) {
-      const dayBefore = addDays(new Date(formData.dueDate), -1);
+      const dayBefore = addDays(parseISO(formData.dueDate), -1);
       workDate = format(dayBefore, "yyyy-MM-dd");
     }
 

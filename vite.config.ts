@@ -1,7 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
@@ -30,7 +29,6 @@ export default defineConfig(({ mode }) => {
   },
   plugins: [
     react(),
-    mode === "development" && componentTagger(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'robots.txt'],
@@ -65,27 +63,49 @@ export default defineConfig(({ mode }) => {
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: apiOrigin
-          ? [
-              {
-                // Matches whichever API origin this deployment's own
-                // VITE_SUPABASE_URL points at (self-hosted gateway or
-                // Supabase Cloud) rather than a single hardcoded domain.
-                urlPattern: new RegExp(`^${apiOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/.*`, "i"),
-                handler: 'NetworkFirst',
-                options: {
-                  cacheName: 'api-cache',
-                  expiration: {
-                    maxEntries: 50,
-                    maxAgeSeconds: 60 * 60 * 24, // 24 hours
+        // /env.js is this deployment's runtime config, rewritten from the
+        // container's environment on every start (docker/start.sh). The copy
+        // in dist/ is only a placeholder, so precaching it would pin
+        // whatever config existed at build time and hide later changes
+        // (a rotated key, a new SITE_URL) behind the service worker.
+        globIgnores: ['env.js'],
+        // The API paths share this origin. A page navigation to one of them
+        // is not an app route, so don't answer it with index.html.
+        navigateFallbackDenylist: [/^\/(auth|rest|functions)\//],
+        runtimeCaching: [
+          {
+            // Always try the network first so config changes apply on the
+            // next load, but fall back to the last copy so an installed PWA
+            // still boots offline. Must stay ahead of the API rule below.
+            urlPattern: ({ url }) => url.pathname === '/env.js',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'runtime-config',
+              networkTimeoutSeconds: 3,
+            },
+          },
+          ...(apiOrigin
+            ? [
+                {
+                  // Matches whichever API origin this deployment's own
+                  // VITE_SUPABASE_URL points at (self-hosted gateway or
+                  // Supabase Cloud) rather than a single hardcoded domain.
+                  urlPattern: new RegExp(`^${apiOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/.*`, "i"),
+                  handler: 'NetworkFirst' as const,
+                  options: {
+                    cacheName: 'api-cache',
+                    expiration: {
+                      maxEntries: 50,
+                      maxAgeSeconds: 60 * 60 * 24, // 24 hours
+                    },
                   },
                 },
-              },
-            ]
-          : [],
+              ]
+            : []),
+        ],
       },
     }),
-  ].filter(Boolean),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

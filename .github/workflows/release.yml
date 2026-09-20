@@ -19,29 +19,42 @@ on:
         description: "Existing tag to (re-)release, e.g. v1.0.0"
         required: true
 
+# Least privilege: nothing gets write access by default; each job asks for
+# only what it needs.
 permissions:
-  contents: write
-  packages: write
+  contents: read
+
+# The tag is handed to steps through this variable, never interpolated into
+# a script with ${{ }}: `tag` is free text when this workflow is started by
+# hand, and expanding it inline would let it inject shell commands.
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Validate tag format
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
+            || { echo "Refusing to release: '$RELEASE_TAG' is not a vX.Y.Z tag"; exit 1; }
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Build source archives
         run: |
-          tag="${{ inputs.tag || github.ref_name }}"
-          git archive --format=tar.gz --prefix="syllabase-${tag}/" -o "syllabase-${tag}.tar.gz" "${tag}"
-          git archive --format=zip --prefix="syllabase-${tag}/" -o "syllabase-${tag}.zip" "${tag}"
+          git archive --format=tar.gz --prefix="syllabase-${RELEASE_TAG}/" -o "syllabase-${RELEASE_TAG}.tar.gz" "${RELEASE_TAG}"
+          git archive --format=zip --prefix="syllabase-${RELEASE_TAG}/" -o "syllabase-${RELEASE_TAG}.zip" "${RELEASE_TAG}"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: |
             syllabase-*.tar.gz
@@ -50,15 +63,23 @@ jobs:
   docker:
     needs: release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref_name }}
+      - name: Validate tag format
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
+            || { echo "Refusing to release: '$RELEASE_TAG' is not a vX.Y.Z tag"; exit 1; }
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -68,24 +89,26 @@ jobs:
       # preserves the account's actual casing (e.g. "OwenWright8"), so it
       # can't be used directly in an image tag.
       - name: Compute lowercase image namespace
-        run: echo "IMAGE_NAMESPACE=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+        env:
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: echo "IMAGE_NAMESPACE=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
       - name: Build and push app image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase:${{ inputs.tag || github.ref_name }}
+            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase:${{ env.RELEASE_TAG }}
             ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase:latest
 
       - name: Build and push db image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile.db
           push: true
           tags: |
-            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-db:${{ inputs.tag || github.ref_name }}
+            ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-db:${{ env.RELEASE_TAG }}
             ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-db:latest

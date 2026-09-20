@@ -9,7 +9,16 @@
 # the same way on a Raspberry Pi, a Mac, or a plain Linux box.
 set -eu
 
+# .env holds every secret for the instance: make it owner-only from the
+# moment it's created, not world-readable like a default `cp` would leave it.
+umask 077
+
 cd "$(dirname "$0")"
+
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "openssl is required to generate secrets but was not found in PATH." >&2
+  exit 1
+fi
 
 if [ -f .env ]; then
   echo ".env already exists — not overwriting it (that would replace live secrets)."
@@ -61,7 +70,27 @@ set_env "JWT_SECRET" "$JWT_SECRET"
 set_env "ANON_KEY" "$ANON_KEY"
 set_env "SERVICE_ROLE_KEY" "$SERVICE_ROLE_KEY"
 set_env "CRON_SECRET" "$(rand_hex)"
-set_env "VITE_SUPABASE_PUBLISHABLE_KEY" "$ANON_KEY"
+
+# POSIX sh has no `pipefail`, so an openssl failure inside the pipelines
+# above would silently yield an empty or truncated secret. Verify what was
+# actually written rather than trust it.
+for key in POSTGRES_PASSWORD JWT_SECRET ANON_KEY SERVICE_ROLE_KEY CRON_SECRET; do
+  value=$(sed -n "s/^${key}=//p" .env)
+  case "$key:$value" in
+    *:""|*:change-me)
+      rm -f .env
+      echo "Failed to generate ${key} (is openssl working?). Removed the incomplete .env." >&2
+      exit 1
+      ;;
+    ANON_KEY:*.*.*|SERVICE_ROLE_KEY:*.*.*) ;;
+    ANON_KEY:*|SERVICE_ROLE_KEY:*)
+      rm -f .env
+      echo "Generated ${key} is not a valid JWT. Removed the incomplete .env." >&2
+      exit 1
+      ;;
+  esac
+done
+chmod 600 .env
 
 echo "Generated .env with fresh secrets."
 echo

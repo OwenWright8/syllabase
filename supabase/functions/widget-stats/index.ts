@@ -100,7 +100,8 @@ Deno.serve(async (req) => {
       .eq('user_id', userId)
 
     if (taskError) {
-      return new Response(JSON.stringify({ error: 'Failed to load tasks', details: taskError.message }), {
+      console.error('widget-stats task query error:', taskError)
+      return new Response(JSON.stringify({ error: 'Failed to load tasks' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -165,8 +166,7 @@ Deno.serve(async (req) => {
     )
   } catch (error) {
     console.error('widget-stats error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return new Response(JSON.stringify({ error: 'An unexpected error occurred', details: message }), {
+    return new Response(JSON.stringify({ error: 'An unexpected error occurred' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

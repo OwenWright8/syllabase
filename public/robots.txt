@@ -1,14 +1,4 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# Syllabase is a private, self-hosted planner: there is nothing here for
+# search engines to index. (The gateway also sends X-Robots-Tag: noindex.)
 User-agent: *
-Allow: /
+Disallow: /

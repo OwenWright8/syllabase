@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useWidgetApiKeys, useCreateWidgetApiKey, useDeleteWidgetApiKey } from "@/hooks/useWidgetApiKeys";
+import { SUPABASE_URL } from "@/lib/runtimeConfig";
 
 export function WidgetApiKeySection() {
   const { data: keys = [] } = useWidgetApiKeys();
@@ -26,7 +27,7 @@ export function WidgetApiKeySection() {
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const functionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/widget-stats`;
+  const functionsUrl = `${SUPABASE_URL}/functions/v1/widget-stats`;
 
   const handleCreate = async () => {
     try {

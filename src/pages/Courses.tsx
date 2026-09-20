@@ -163,6 +163,7 @@ export default function Courses() {
                     
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button
+                        aria-label={`Edit ${course.name}`}
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
@@ -246,6 +247,7 @@ export default function Courses() {
                         
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <Button
+                            aria-label={`Edit ${course.name}`}
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 rounded-lg"

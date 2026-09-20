@@ -7,7 +7,8 @@ import { ActivityHeatmap } from "@/components/today/ActivityHeatmap";
 import { ComingUpSection } from "@/components/today/ComingUpSection";
 import { BentoEmptyState } from "@/components/today/BentoEmptyState";
 import { BentoExamCountdown } from "@/components/today/BentoExamCountdown";
-import { FloatingActionButton } from "@/components/today/FloatingActionButton";
+import { FloatingActionButton, QuickAddKind } from "@/components/today/FloatingActionButton";
+import { QuickAddDialogs } from "@/components/today/QuickAddDialogs";
 import { TaskSection } from "@/components/today/TaskSection";
 import { UpcomingReadingsWidget } from "@/components/readings/UpcomingReadingsWidget";
 import { UpcomingStudyWidget } from "@/components/study/UpcomingStudyWidget";
@@ -40,6 +41,7 @@ export default function Today() {
   const markTaskDone = useMarkTaskDone();
   const [selectedDate, setSelectedDate] = useState(nowInTimezone(timezone));
   const [weekStart, setWeekStart] = useState(startOfWeek(nowInTimezone(timezone)));
+  const [quickAdd, setQuickAdd] = useState<QuickAddKind | null>(null);
   const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
   const {
@@ -426,8 +428,9 @@ export default function Today() {
           </div>
         </div>
 
-        {/* Floating Action Button */}
-        <FloatingActionButton />
+        {/* Quick add: the "+" menu opens the create form right here */}
+        <FloatingActionButton onSelect={setQuickAdd} />
+        <QuickAddDialogs active={quickAdd} onClose={() => setQuickAdd(null)} />
       </div>
     </Layout>
   );

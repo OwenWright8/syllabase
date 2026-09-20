@@ -113,30 +113,18 @@ jobs:
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":true'
 
-      # A headless Chromium request to the very same function once hung
-      # (request accepted, function's own DB query completed, response never
-      # delivered) while every curl call returned instantly. Replay the call
-      # with browser-style headers one at a time to see which one matters.
-      # Diagnostic only — never fails the build.
-      - name: Probe edge runtime with browser-like request headers
-        continue-on-error: true
+      # Chrome/Edge send `Accept-Encoding: gzip, deflate, br, zstd`. With that
+      # header the edge runtime accepted the request, ran the function, and
+      # never delivered the response (curl without it: ~5ms; Safari, which
+      # omits zstd, was unaffected). nginx now strips the header on
+      # /functions/v1/ — keep a hard check so it can't regress. curl alone
+      # never reproduced this until the header was sent explicitly.
+      - name: Chromium-style Accept-Encoding (zstd) does not hang the edge runtime
         run: |
           ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
-          URL=http://localhost:8080/functions/v1/instance-status
-          probe() {
-            label="$1"; shift
-            out=$(curl -sS -o /dev/null -w '%{http_code} in %{time_total}s' --max-time 8 -X POST "$URL" \
-              -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}" "$@" 2>&1) || out="${out} (curl exit $?)"
-            echo "${label}: ${out}"
-          }
-          probe "baseline (what curl steps use)"
-          probe "Content-Type json + Content-Length 0" -H "Content-Type: application/json" -H "Content-Length: 0"
-          probe "Accept-Encoding incl. zstd" -H "Accept-Encoding: gzip, deflate, br, zstd"
-          probe "Origin + Referer" -H "Origin: http://localhost:8080" -H "Referer: http://localhost:8080/auth"
-          probe "x-client-info + keep-alive" -H "x-client-info: supabase-js-web/2.81.1" -H "Connection: keep-alive"
-          probe "all of the above" -H "Content-Type: application/json" -H "Content-Length: 0" \
-            -H "Accept-Encoding: gzip, deflate, br, zstd" -H "Origin: http://localhost:8080" \
-            -H "Referer: http://localhost:8080/auth" -H "x-client-info: supabase-js-web/2.81.1" -H "Connection: keep-alive"
+          curl -fsS --max-time 8 -X POST http://localhost:8080/functions/v1/instance-status \
+            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}" \
+            -H "Accept-Encoding: gzip, deflate, br, zstd"
 
       # The UI paths that depend on the runtime config injected into
       # /env.js (widget URL, Delete Account) — see scripts/ui-smoke.mjs.

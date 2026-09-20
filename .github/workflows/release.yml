@@ -76,6 +76,10 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
+      # Emulation, so the arm64 image's small `apt-get` step can run on this amd64
+      # runner. (Only that step is emulated: the frontend is built natively.)
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
@@ -98,6 +102,7 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase:${{ env.RELEASE_TAG }}
@@ -108,6 +113,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.db
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/${{ env.IMAGE_NAMESPACE }}/syllabase-db:${{ env.RELEASE_TAG }}

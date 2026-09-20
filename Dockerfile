@@ -20,11 +20,15 @@
 # live GitHub Actions build/run of this exact Dockerfile, but re-verify
 # if you bump versions and a COPY step starts failing:
 #   docker run --rm --entrypoint find supabase/gotrue:<tag> / -maxdepth 3 -iname '*gotrue*'
-# Also re-verify these images exist for your host's architecture
-# (`docker manifest inspect <image>:<tag>`) before building on ARM (e.g.
-# a Raspberry Pi) — only confirmed on linux/amd64 so far.
+#
+# Built for linux/amd64 and linux/arm64 (Raspberry Pi, ARM servers): every
+# upstream image below publishes both. When bumping a version, confirm that
+# still holds (`docker buildx imagetools inspect <image>:<tag>`); CI builds the
+# arm64 image on every change so a missing architecture shows up straight away.
 
-FROM node:20-alpine AS frontend-build
+# The frontend is static files, so it is built once on the build machine's own
+# architecture (no emulation) and copied into every target image.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

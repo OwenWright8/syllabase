@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -168,6 +168,44 @@ export function useReadingTasks() {
   });
 }
 
+// --- Optimistic status changes -------------------------------------------
+//
+// Ticking a task off used to wait for the server (and then a refetch) before
+// it left the list. These helpers update every cached task list straight away
+// and hand back a snapshot so a failed request can put things back.
+
+type CachedTask = { id: string; status?: string; completed_at?: string | null };
+type TaskListSnapshot = [QueryKey, CachedTask[] | undefined][];
+
+// Cached lists whose query only ever returns not-done tasks (see useTasks and
+// useCourseTasks above): a task that becomes "done" has to leave them, rather
+// than stay in the list marked done. Keep in sync with those queries.
+const ACTIVE_ONLY_LISTS = new Set(["active-non-reading", "course"]);
+
+async function applyOptimisticStatus(queryClient: QueryClient, userId: string, taskId: string, status: string) {
+  const key = taskKeys.all(userId);
+  // Stop an in-flight refetch from landing on top of the optimistic value.
+  await queryClient.cancelQueries({ queryKey: key });
+  const snapshot = queryClient.getQueriesData<CachedTask[]>({ queryKey: key });
+  const completed_at = status === "done" ? new Date().toISOString() : null;
+
+  for (const [queryKey, list] of snapshot) {
+    if (!Array.isArray(list)) continue;
+    const leavesList = status === "done" && ACTIVE_ONLY_LISTS.has(String(queryKey[2]));
+    queryClient.setQueryData(
+      queryKey,
+      leavesList
+        ? list.filter((task) => task.id !== taskId)
+        : list.map((task) => (task.id === taskId ? { ...task, status, completed_at } : task))
+    );
+  }
+  return snapshot as TaskListSnapshot;
+}
+
+function rollbackTaskLists(queryClient: QueryClient, snapshot: TaskListSnapshot | undefined) {
+  snapshot?.forEach(([queryKey, list]) => queryClient.setQueryData(queryKey, list));
+}
+
 export function useUpdateTaskStatus() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -178,7 +216,12 @@ export function useUpdateTaskStatus() {
       const { error } = await supabase.from("tasks").update({ status, completed_at }).eq("id", taskId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async ({ taskId, status }) => {
+      if (!user) return undefined;
+      return { snapshot: await applyOptimisticStatus(queryClient, user.id, taskId, status) };
+    },
+    onError: (_error, _variables, context) => rollbackTaskLists(queryClient, context?.snapshot),
+    onSettled: () => {
       if (user) queryClient.invalidateQueries({ queryKey: taskKeys.all(user.id) });
     },
   });
@@ -199,7 +242,12 @@ export function useMarkTaskDone() {
         .eq("id", taskId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async (taskId) => {
+      if (!user) return undefined;
+      return { snapshot: await applyOptimisticStatus(queryClient, user.id, taskId, "done") };
+    },
+    onError: (_error, _taskId, context) => rollbackTaskLists(queryClient, context?.snapshot),
+    onSettled: () => {
       if (user) queryClient.invalidateQueries({ queryKey: taskKeys.all(user.id) });
     },
   });

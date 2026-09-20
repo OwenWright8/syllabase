@@ -13,6 +13,7 @@ import { format, parseISO } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { useNavigate } from "react-router-dom";
 import { applyColorTheme, colorThemes } from "@/lib/colorThemes";
+import { SUPABASE_URL } from "@/lib/runtimeConfig";
 import { Clock, CalendarDays } from "lucide-react";
 import { WidgetApiKeySection } from "@/components/WidgetApiKeySection";
 import {
@@ -177,7 +178,7 @@ export default function Profile() {
 
       // Call the edge function to delete the user account and all data
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+        `${SUPABASE_URL}/functions/v1/delete-user`,
         {
           method: 'POST',
           headers: {

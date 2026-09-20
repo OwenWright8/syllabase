@@ -113,6 +113,29 @@ jobs:
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":true'
 
+      # The UI paths that depend on the runtime config injected into
+      # /env.js (widget URL, Delete Account) — see scripts/ui-smoke.mjs.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: UI smoke test (sign in, widget URL, delete account)
+        run: node scripts/ui-smoke.mjs
+
+      - name: Deleting the account really removed it (back to a fresh instance)
+        run: |
+          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
+          body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
+            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+          echo "$body"
+          echo "$body" | grep -q '"hasAccounts":false'
+
       - name: Startup diagnostics
         if: always()
         run: |

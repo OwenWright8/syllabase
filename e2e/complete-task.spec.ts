@@ -21,3 +21,44 @@ for (const browserTz of ["America/New_York", "UTC", "Europe/Berlin", "Asia/Tokyo
     });
   });
 }
+
+// The list used to wait for the server's answer (and a refetch) before the
+// task disappeared, so ticking something off felt laggy. It now updates
+// immediately and rolls back if the server refuses.
+test.describe("completing a task feels instant", () => {
+  test("the task leaves the list before the server has answered", async ({ context, page }) => {
+    const backend = await installFakeBackend(context, { tasks: [makeTask()] });
+    backend.patchDelayMs = 4000;
+    await page.goto("/");
+    await page.getByRole("button", { name: 'Mark "Seed task" complete' }).click();
+
+    // Well inside the held-back response (only the ~0.4s exit animation is allowed).
+    await expect(page.getByText("Seed task")).toBeHidden({ timeout: 2000 });
+    // The row goes the moment the change is made; the request follows a beat later.
+    await expect.poll(() => backend.patches("tasks").length).toBe(1);
+    expect(backend.db.tasks[0].status).toBe("not_started"); // ...and the server hasn't applied it yet
+  });
+
+  test("the Assignments page updates immediately too", async ({ context, page }) => {
+    const backend = await installFakeBackend(context, { tasks: [makeTask()] });
+    backend.patchDelayMs = 4000;
+    await page.goto("/assignments");
+    await page.getByRole("button", { name: 'Mark "Seed task" complete' }).click();
+
+    await expect(page.getByText("Seed task")).toBeHidden({ timeout: 2000 });
+    expect(backend.db.tasks[0].status).toBe("not_started");
+  });
+
+  test("if the server refuses, the task comes back and the error is shown", async ({ context, page }) => {
+    const backend = await installFakeBackend(context, { tasks: [makeTask()] });
+    backend.failPatches = true;
+    await page.goto("/");
+    await page.getByRole("button", { name: 'Mark "Seed task" complete' }).click();
+
+    // The app shows a generic message rather than the database's own error text.
+    await expect(page.getByText("Something went wrong")).toBeVisible();
+    await expect(page.getByText("Seed task")).toBeVisible();
+    await expect(page.getByRole("button", { name: 'Mark "Seed task" complete' })).toBeEnabled();
+    expect(backend.db.tasks[0].status).toBe("not_started");
+  });
+});

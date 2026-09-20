@@ -14,7 +14,7 @@ It helps you:
 
 ## Self-hosting
 
-Syllabase is two containers: `db` (Postgres, extended with a couple of small init scripts GoTrue/PostgREST need — see `Dockerfile.db`), and one `app` container bundling everything else — auth, the REST API, the 5 edge functions, and the frontend, all behind an internal gateway. No external accounts or SaaS dependencies required.
+Syllabase is two containers: `db` (Postgres, extended with a couple of small init scripts GoTrue/PostgREST need — see `Dockerfile.db`), and one `app` container bundling everything else — auth, the REST API, the 5 edge functions, and the frontend, all behind an internal gateway. No external accounts or SaaS dependencies required. Images are published for both `amd64` and `arm64`, so it runs on a Raspberry Pi or other ARM server as well as a regular PC.
 
 ### Quickstart
 

@@ -289,11 +289,22 @@ jobs:
           } > .env
           docker compose up -d
           ./scripts/wait-for-stack.sh
-          # supplied values win: nothing generated into the volume
-          [ -z "$(docker compose exec -T app ls -A /secrets)" ]
-          [ -z "$(docker compose exec -T db ls -A /secrets)" ]
+          # Supplied values win: nothing is generated into the volume, and the
+          # supplied anon key (not a derived one) is what the frontend gets.
+          # Each check is named and its evidence printed, so a failure says which.
+          failed=0
+          check() { if "${@:2}"; then echo "  ok   - $1"; else echo "  FAIL - $1"; failed=1; fi; }
+          echo "--- /secrets in app:"; docker compose exec -T app ls -la /secrets || true
+          echo "--- /secrets in db:";  docker compose exec -T db  ls -la /secrets || true
+          app_files=$(docker compose exec -T app ls -A /secrets 2>&1 || true)
+          db_files=$(docker compose exec -T db ls -A /secrets 2>&1 || true)
           key=$(curl -fsS http://localhost:8080/env.js | sed -n 's/.*VITE_SUPABASE_PUBLISHABLE_KEY: "\(.*\)".*/\1/p')
-          [ "$key" = "$anon" ]
+          echo "--- anon key (public): supplied=${anon}"
+          echo "                        served =${key}"
+          check "app container generated nothing into /secrets" test -z "$app_files"
+          check "db container generated nothing into /secrets" test -z "$db_files"
+          check "frontend gets the supplied anon key" test "$key" = "$anon"
+          [ "$failed" = 0 ]
           echo "ANON_KEY=$anon" >> "$GITHUB_ENV"
           code=$(curl -sS -o legacy-signup.json -w '%{http_code}' -X POST http://localhost:8080/auth/v1/signup \
             -H "apikey: ${anon}" -H "Content-Type: application/json" \

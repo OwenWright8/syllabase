@@ -5,6 +5,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const json = (body: unknown, status: number) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+
+// Deletes the calling user's account and all of their data.
+//
+// Every user-owned table (profiles, courses, exams, tasks, readings,
+// quizzes, study_items, notification_settings/log, widget_api_keys)
+// references auth.users with ON DELETE CASCADE, so deleting the auth user
+// removes everything in a single atomic step. (An earlier version deleted
+// table by table first; that could leave a half-deleted account if any
+// step failed, and had to be kept in sync with every new table.)
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -12,138 +26,36 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Create a Supabase client with the service role key
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return json({ error: 'No authorization header' }, 401)
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+      { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Get the authorization header from the request
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Get the user from the auth header
+    // Identify the caller from their own session token — never from the
+    // request body — so a user can only ever delete themselves.
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
-    
+
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Invalid token or user not found' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+      return json({ error: 'Invalid token or user not found' }, 401)
     }
 
-    const userId = user.id
-
-    // Delete all user data in the correct order (respecting foreign keys)
-    // Delete tasks first (has foreign keys to exams and courses)
-    const { error: tasksError } = await supabaseAdmin
-      .from('tasks')
-      .delete()
-      .eq('user_id', userId)
-
-    if (tasksError) {
-      console.error('Error deleting tasks:', tasksError)
-      return new Response(JSON.stringify({ error: 'Failed to delete tasks', details: tasksError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Delete readings (has foreign key to courses)
-    const { error: readingsError } = await supabaseAdmin
-      .from('readings')
-      .delete()
-      .eq('user_id', userId)
-
-    if (readingsError) {
-      console.error('Error deleting readings:', readingsError)
-      return new Response(JSON.stringify({ error: 'Failed to delete readings', details: readingsError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Delete exams (has foreign key to courses)
-    const { error: examsError } = await supabaseAdmin
-      .from('exams')
-      .delete()
-      .eq('user_id', userId)
-
-    if (examsError) {
-      console.error('Error deleting exams:', examsError)
-      return new Response(JSON.stringify({ error: 'Failed to delete exams', details: examsError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Delete courses
-    const { error: coursesError } = await supabaseAdmin
-      .from('courses')
-      .delete()
-      .eq('user_id', userId)
-
-    if (coursesError) {
-      console.error('Error deleting courses:', coursesError)
-      return new Response(JSON.stringify({ error: 'Failed to delete courses', details: coursesError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Delete profile
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .delete()
-      .eq('id', userId)
-
-    if (profileError) {
-      console.error('Error deleting profile:', profileError)
-      return new Response(JSON.stringify({ error: 'Failed to delete profile', details: profileError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Finally, delete the auth user
-    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id)
 
     if (deleteError) {
       console.error('Error deleting auth user:', deleteError)
-      return new Response(JSON.stringify({ error: 'Failed to delete auth user', details: deleteError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+      return json({ error: 'Failed to delete account' }, 500)
     }
 
-    return new Response(
-      JSON.stringify({ message: 'User account and all data successfully deleted' }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    )
+    return json({ message: 'User account and all data successfully deleted' }, 200)
   } catch (error) {
     console.error('Unexpected error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return new Response(
-      JSON.stringify({ error: 'An unexpected error occurred', details: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    )
+    return json({ error: 'An unexpected error occurred' }, 500)
   }
 })

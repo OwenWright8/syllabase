@@ -6,13 +6,17 @@ on:
     branches:
       - main
 
+# CI only reads the repo; no job needs a write-scoped token.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -28,15 +32,24 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate docker-compose.yml
-        run: docker compose config >/dev/null
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Generate .env for the smoke test
         run: |
           ./setup.sh
           sed -i 's|^SITE_URL=.*|SITE_URL=http://localhost:8080|' .env
+
+      - name: Validate docker-compose.yml
+        run: docker compose config >/dev/null
+
+      # Every secret is `${VAR:?...}` in the compose file; an empty one must
+      # stop compose rather than boot an instance with a blank secret (an
+      # empty CRON_SECRET used to leave the notification endpoint open).
+      - name: Compose refuses to start with an empty secret
+        run: |
+          if CRON_SECRET= docker compose config >/dev/null 2>&1; then
+            echo "compose accepted an empty CRON_SECRET"; exit 1
+          fi
 
       # This is the real test: build from source and actually run the full
       # stack (db + app), not just confirm the image builds — a clean build
@@ -126,9 +139,36 @@ jobs:
             -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}" \
             -H "Accept-Encoding: gzip, deflate, br, zstd"
 
+      # The cron endpoint is only meant for Postgres (pg_cron) and is guarded
+      # by a shared secret; the function router must serve only the known
+      # functions (the name comes straight from the URL).
+      - name: Cron endpoint and function router reject what they should
+        run: |
+          CRON_SECRET=$(grep '^CRON_SECRET=' .env | cut -d= -f2)
+          code() { curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$@"; }
+          fn=http://localhost:8080/functions/v1
+          [ "$(code -X POST $fn/send-notifications)" = "401" ]
+          [ "$(code -X POST $fn/send-notifications -H 'x-cron-secret: wrong')" = "401" ]
+          [ "$(code -X POST $fn/send-notifications -H "x-cron-secret: ${CRON_SECRET}")" = "200" ]
+          [ "$(code -X POST $fn/main)" = "404" ]
+          [ "$(code -X POST $fn/does-not-exist)" = "404" ]
+
+      # env.js is rewritten from the container's env on every start, so it
+      # must carry this deployment's real key (derived from ANON_KEY) and
+      # must never be cached; the gateway also sets baseline security headers.
+      - name: Runtime config is fresh and security headers are set
+        run: |
+          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
+          headers=$(curl -fsSI http://localhost:8080/env.js)
+          echo "$headers"
+          echo "$headers" | grep -i '^cache-control:' | grep -qi 'no-cache'
+          echo "$headers" | grep -qi '^x-content-type-options: nosniff'
+          echo "$headers" | grep -qi '^content-security-policy:'
+          curl -fsS http://localhost:8080/env.js | grep -qF "$ANON_KEY"
+
       # The UI paths that depend on the runtime config injected into
       # /env.js (widget URL, Delete Account) — see scripts/ui-smoke.mjs.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -148,6 +188,21 @@ jobs:
             -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":false'
+
+      # Deliberately the last functional step: it exhausts this client's
+      # rate-limit bucket for a while, which would fail any sign-in after it.
+      - name: Auth endpoints are rate limited
+        run: |
+          limited=0
+          for i in $(seq 1 60); do
+            c=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+              "http://localhost:8080/auth/v1/token?grant_type=password" \
+              -H "apikey: $(grep '^ANON_KEY=' .env | cut -d= -f2)" -H "Content-Type: application/json" \
+              -d '{"email":"nobody@accounts.local","password":"wrong-password"}')
+            [ "$c" = "429" ] && limited=$((limited + 1))
+          done
+          echo "rate-limited responses: ${limited}/60"
+          [ "$limited" -gt 0 ]
 
       - name: Startup diagnostics
         if: always()

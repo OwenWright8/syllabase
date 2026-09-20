@@ -41,12 +41,12 @@ const queryClient = new QueryClient({
 const App = () => (
   <ErrorBoundary>
   <QueryClientProvider client={queryClient}>
+    <AuthProvider>
     <ThemeProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AuthProvider>
             <PageTransition>
             <Suspense fallback={<PageSpinner />}>
               <Routes>
@@ -136,10 +136,10 @@ const App = () => (
               </Routes>
             </Suspense>
             </PageTransition>
-          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
+    </AuthProvider>
   </QueryClientProvider>
   </ErrorBoundary>
 );

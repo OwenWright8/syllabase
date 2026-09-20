@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { applyColorTheme } from '@/lib/colorThemes';
-import { supabase } from '@/integrations/supabase/client';
+import { useUserPreferences } from '@/hooks/useUserTimezone';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -34,40 +34,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyColorTheme(colorTheme, isDark);
   }, []);
 
-  // Load color theme from profile and listen to auth changes
+  // Adopt the user's saved preferences when they arrive (on sign-in, or after
+  // they're changed on the Profile page). They come from the shared profile
+  // query rather than a fetch of our own. This runs when the saved *values*
+  // change, not on every auth event, so a theme toggled in the header isn't
+  // undone when, say, the tab regains focus.
+  const { colorTheme: savedColorTheme, themePreference } = useUserPreferences();
   useEffect(() => {
-    const loadColorTheme = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('color_theme, theme_preference')
-          .eq('id', user.id)
-          .single();
-        
-        if (data?.color_theme) {
-          setColorTheme(data.color_theme);
-          localStorage.setItem('colorTheme', data.color_theme);
-        }
-        if (data?.theme_preference && data.theme_preference !== 'system') {
-          setTheme(data.theme_preference as Theme);
-        }
-      }
-    };
-    
-    loadColorTheme();
-
-    // Listen to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        loadColorTheme();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+    if (savedColorTheme) {
+      setColorTheme(savedColorTheme);
+      localStorage.setItem('colorTheme', savedColorTheme);
+    }
+    if (themePreference && themePreference !== 'system') {
+      setTheme(themePreference as Theme);
+    }
+  }, [savedColorTheme, themePreference]);
 
   useEffect(() => {
     const root = document.documentElement;

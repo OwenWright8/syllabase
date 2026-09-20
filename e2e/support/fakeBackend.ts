@@ -53,6 +53,8 @@ export class FakeBackend {
   readonly writes: Write[] = [];
   readonly requests: { table: string; method: string }[] = [];
   /** How long to hold PATCH responses back — lets a spec observe optimistic UI. */
+  /** Requests to /auth/v1/user (a network round trip the app can usually avoid). */
+  authUserRequests = 0;
   patchDelayMs = 0;
   /** Answer PATCHes with a 500, to exercise rollback. */
   failPatches = false;
@@ -106,6 +108,7 @@ export class FakeBackend {
 
     if (method === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     if (url.pathname === "/auth/v1/user") {
+      this.authUserRequests++;
       return json(200, { id: USER_ID, email: "me@accounts.local", aud: "authenticated", role: "authenticated" });
     }
     if (url.pathname === "/functions/v1/instance-status") return json(200, { hasAccounts: this.hasAccounts });

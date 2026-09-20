@@ -17,6 +17,9 @@ const PASS = process.env.SMOKE_PASS ?? "ci-test-password-123";
 const browser = await chromium.launch();
 const page = await browser.newPage();
 page.on("pageerror", (e) => console.log("pageerror:", e.message));
+page.on("console", (m) => m.type() === "error" && console.log("console.error:", m.text().slice(0, 200)));
+page.on("requestfailed", (r) => console.log("requestfailed:", r.method(), r.url(), r.failure()?.errorText));
+page.on("response", (r) => r.status() >= 400 && console.log("http", r.status(), r.request().method(), r.url()));
 
 async function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -28,6 +31,7 @@ async function fail(message) {
 
 console.log("1. sign in with the username form");
 await page.goto(`${BASE}/auth`);
+await page.locator("#username").waitFor({ timeout: 20000 }).catch(() => fail("sign-in form never rendered on /auth"));
 await page.locator("#username").fill(USER);
 await page.locator("#password").fill(PASS);
 await page.getByRole("button", { name: "Sign In" }).click();

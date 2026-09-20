@@ -29,12 +29,22 @@ export default function Auth() {
   useEffect(() => {
     const checkSetup = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("instance-status");
+        // Bounded on purpose: this call gates whether the sign-in form
+        // renders at all, so a slow or hung backend (seen in practice —
+        // the request was accepted and the query ran, but no response
+        // came back) must not leave the page on a permanent spinner.
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("instance-status check timed out")), 6000)
+        );
+        const { data, error } = await Promise.race([
+          supabase.functions.invoke("instance-status"),
+          timeout,
+        ]);
         if (error) throw error;
         setIsFirstRun(!data?.hasAccounts);
       } catch (error) {
-        // If the check itself fails, default to the normal sign-in screen
-        // rather than blocking access entirely.
+        // If the check itself fails or times out, default to the normal
+        // sign-in / sign-up screen rather than blocking access entirely.
         console.error("Failed to check instance status:", error);
         setIsFirstRun(false);
       } finally {

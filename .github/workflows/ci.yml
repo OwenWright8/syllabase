@@ -99,6 +99,10 @@ jobs:
       - name: Wait for the app and GoTrue
         run: ./scripts/wait-for-stack.sh
 
+      # NOTE: the harness's own variables are prefixed CI_ on purpose. Docker
+      # Compose gives a *shell* variable precedence over .env, so exporting
+      # ANON_KEY here would silently override what the stack under test is given.
+      #
       # The anon key is public (the frontend needs it), so read it back the way
       # a browser does. The API address must NOT be in there: the app uses the
       # address it was loaded from.
@@ -109,7 +113,7 @@ jobs:
           key=$(echo "$body" | sed -n 's/.*VITE_SUPABASE_PUBLISHABLE_KEY: "\(.*\)".*/\1/p')
           [ -n "$key" ]
           echo "$body" | grep -q 'VITE_SUPABASE_URL' && { echo "env.js must not carry an API address"; exit 1; }
-          echo "ANON_KEY=$key" >> "$GITHUB_ENV"
+          echo "CI_ANON_KEY=$key" >> "$GITHUB_ENV"
 
       - name: Secrets were generated and stored in the volume
         run: |
@@ -121,14 +125,14 @@ jobs:
       - name: Fresh instance reports no accounts yet
         run: |
           body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}")
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":false'
 
       - name: Sign up
         run: |
           code=$(curl -sS -o signup.json -w '%{http_code}' -X POST http://localhost:8080/auth/v1/signup \
-            -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
             -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')
           echo "HTTP ${code}"; cat signup.json; echo
           [ "$code" = "200" ]
@@ -138,17 +142,17 @@ jobs:
         run: |
           code=$(curl -sS -o login.json -w '%{http_code}' -X POST \
             "http://localhost:8080/auth/v1/token?grant_type=password" \
-            -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
             -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')
           echo "HTTP ${code}"
           [ "$code" = "200" ]
           grep -q '"access_token"' login.json
-          echo "ACCESS_TOKEN=$(sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' login.json)" >> "$GITHUB_ENV"
+          echo "CI_ACCESS_TOKEN=$(sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' login.json)" >> "$GITHUB_ENV"
 
       - name: Instance now reports an account exists (signup trigger + PostgREST + edge runtime)
         run: |
           body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}")
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":true'
 
@@ -159,7 +163,7 @@ jobs:
       - name: Chromium-style Accept-Encoding (zstd) does not hang the edge runtime
         run: |
           curl -fsS --max-time 8 -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}" \
             -H "Accept-Encoding: gzip, deflate, br, zstd"
 
       # The cron endpoint is only meant for Postgres (pg_cron) and is guarded by
@@ -184,7 +188,7 @@ jobs:
           echo "$headers" | grep -i '^cache-control:' | grep -qi 'no-cache'
           echo "$headers" | grep -qi '^x-content-type-options: nosniff'
           echo "$headers" | grep -qi '^content-security-policy:'
-          curl -fsS http://localhost:8080/env.js | grep -qF "$ANON_KEY"
+          curl -fsS http://localhost:8080/env.js | grep -qF "$CI_ANON_KEY"
 
       # What `docker compose pull && up -d` does: containers are recreated, the
       # volumes stay. Secrets and the API key must be the same afterwards, the
@@ -201,13 +205,13 @@ jobs:
           [ "$cron_before" = "$(fp app cron_secret)" ]
           [ "$pg_before"   = "$(fp db postgres_password)" ]
           key=$(curl -fsS http://localhost:8080/env.js | sed -n 's/.*VITE_SUPABASE_PUBLISHABLE_KEY: "\(.*\)".*/\1/p')
-          [ "$key" = "$ANON_KEY" ]
+          [ "$key" = "$CI_ANON_KEY" ]
           # a token from before the restart is still valid...
           [ "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/auth/v1/user \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ACCESS_TOKEN}")" = "200" ]
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}")" = "200" ]
           # ...and the account (i.e. the database, with its original password) is intact
           [ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://localhost:8080/auth/v1/token?grant_type=password" \
-            -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
             -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')" = "200" ]
 
       # The UI paths that depend on the runtime config. The app has no
@@ -232,7 +236,7 @@ jobs:
       - name: Deleting the account really removed it (back to a fresh instance)
         run: |
           body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}")
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":false'
 
@@ -305,7 +309,7 @@ jobs:
           check "db container generated nothing into /secrets" test -z "$db_files"
           check "frontend gets the supplied anon key" test "$key" = "$anon"
           [ "$failed" = 0 ]
-          echo "ANON_KEY=$anon" >> "$GITHUB_ENV"
+          echo "CI_ANON_KEY=$anon" >> "$GITHUB_ENV"
           code=$(curl -sS -o legacy-signup.json -w '%{http_code}' -X POST http://localhost:8080/auth/v1/signup \
             -H "apikey: ${anon}" -H "Content-Type: application/json" \
             -d '{"email":"legacy-user@accounts.local","password":"ci-test-password-123"}')
@@ -320,7 +324,7 @@ jobs:
           for i in $(seq 1 60); do
             c=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
               "http://localhost:8080/auth/v1/token?grant_type=password" \
-              -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+              -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
               -d '{"email":"nobody@accounts.local","password":"wrong-password"}')
             [ "$c" = "429" ] && limited=$((limited + 1))
           done

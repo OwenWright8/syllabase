@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { userPreferencesKeys } from "@/hooks/useUserTimezone";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PushoverNotificationSettings } from "@/components/notifications/PushoverNotificationSettings";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +40,7 @@ interface Profile {
 
 export default function Profile() {
   const { user, signOut } = useAuth();
+  const queryClient = useQueryClient();
   const { theme, setTheme, setColorTheme: updateContextColorTheme } = useTheme();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -152,6 +155,9 @@ export default function Profile() {
       const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
       applyColorTheme(colorTheme, isDark);
       
+      // Timezone/semester start are cached app-wide; refresh them everywhere.
+      queryClient.invalidateQueries({ queryKey: userPreferencesKeys.all(user.id) });
+
       toast.success("Profile updated successfully");
       loadProfile();
     } catch (error) {

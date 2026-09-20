@@ -34,6 +34,26 @@ function getGreeting(): { text: string; icon: typeof Sun } {
 }
 
 export default function Today() {
+  const { loading } = useUserTimezone();
+
+  // The selected date and week below are derived once, from the timezone, on
+  // first render. Waiting for the profile's timezone (instead of starting from
+  // the New York default) keeps Today from opening on the wrong day for anyone
+  // whose calendar date differs from New York's.
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent"></div>
+        </div>
+      </Layout>
+    );
+  }
+
+  return <TodayView />;
+}
+
+function TodayView() {
   const { timezone } = useUserTimezone();
   const { data: allTasks = [], isLoading } = useUserTasks();
   const { data: upcomingExams = [] } = useUpcomingExams();

@@ -30,6 +30,11 @@ jobs:
       # Playwright transpiles specs without type-checking them.
       - run: npx tsc --noEmit -p e2e/tsconfig.json
 
+      # Shell logic of the Docker setup (secret generation, the db entrypoint
+      # wrapper, start.sh's config handling), under dash like the containers.
+      - name: Container script tests
+        run: bash docker/tests/run-all.sh
+
       - run: npm run build
 
   # Browser tests against the real UI, with the backend replaced by an
@@ -50,79 +55,84 @@ jobs:
 
       - run: npm run test:e2e
 
+  # The images are also published for arm64 (Raspberry Pi, ARM servers). CI
+  # can't run arm64 containers natively, but BUILDING the image proves the parts
+  # most likely to break: every upstream image still ships arm64 and the binary
+  # paths the Dockerfile copies exist in it. Not pushed.
+  arm64-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build the app image for arm64
+        run: docker buildx build --platform linux/arm64 -f Dockerfile .
+
+      - name: Build the database image for arm64
+        run: docker buildx build --platform linux/arm64 -f Dockerfile.db .
+
+  # Runs the real stack in Docker, exercising what a self-hoster does:
+  #   1. zero-config: NO .env, `docker compose up`, sign up, use it (the main test)
+  #   2. it survives a restart with the same secrets (what an upgrade does)
+  #   3. it refuses to invent a database password if the secrets volume is lost
+  #   4. an OLD-style .env (incl. SITE_URL) still works, so upgrades don't break
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Generate .env for the smoke test
+      - name: There is nothing to configure
         run: |
-          ./setup.sh
-          sed -i 's|^SITE_URL=.*|SITE_URL=http://localhost:8080|' .env
+          test ! -e .env
+          docker compose config >/dev/null
 
-      - name: Validate docker-compose.yml
-        run: docker compose config >/dev/null
-
-      # Every secret is `${VAR:?...}` in the compose file; an empty one must
-      # stop compose rather than boot an instance with a blank secret (an
-      # empty CRON_SECRET used to leave the notification endpoint open).
-      - name: Compose refuses to start with an empty secret
-        run: |
-          if CRON_SECRET= docker compose config >/dev/null 2>&1; then
-            echo "compose accepted an empty CRON_SECRET"; exit 1
-          fi
-
-      # This is the real test: build from source and actually run the full
-      # stack (db + app), not just confirm the image builds — a clean build
-      # doesn't guarantee gotrue/postgrest/edge-runtime actually start and
-      # talk to each other correctly inside the merged container.
-      - name: Build and start the stack
+      # Build from source and actually run the full stack (db + app): a clean
+      # build doesn't guarantee gotrue/postgrest/edge-runtime start and talk to
+      # each other inside the merged container. No .env, no setup step: the
+      # secrets are generated on first start.
+      - name: Build and start the stack (no .env)
         run: docker compose up -d --build
 
-      - name: Wait for the app to come up
-        run: |
-          for i in $(seq 1 60); do
-            if curl -fs http://localhost:8080/ >/dev/null; then
-              echo "App responded after ${i} attempt(s)"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "App never came up"
-          exit 1
+      - name: Wait for the app and GoTrue
+        run: ./scripts/wait-for-stack.sh
 
-      # nginx serves the static frontend even when a backend has crashed, so
-      # "the page loads" proves very little. Everything below exercises the
-      # real user flow end to end: GoTrue up (it runs its own long
-      # migration set on first boot), the first-run status check, sign up,
-      # log in, and the status check flipping once an account exists. An
-      # earlier version of this job only hit instance-status and so passed
-      # while GoTrue was crashing on startup and every signup 502'd.
-      - name: Wait for GoTrue (auth) to come up
+      # NOTE: the harness's own variables are prefixed CI_ on purpose. Docker
+      # Compose gives a *shell* variable precedence over .env, so exporting
+      # ANON_KEY here would silently override what the stack under test is given.
+      #
+      # The anon key is public (the frontend needs it), so read it back the way
+      # a browser does. The API address must NOT be in there: the app uses the
+      # address it was loaded from.
+      - name: Read the public runtime config
         run: |
-          for i in $(seq 1 60); do
-            if curl -fs http://localhost:8080/auth/v1/health >/dev/null; then
-              echo "GoTrue healthy after ${i} attempt(s)"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "GoTrue never became healthy"
-          exit 1
+          body=$(curl -fsS http://localhost:8080/env.js)
+          echo "$body"
+          key=$(echo "$body" | sed -n 's/.*VITE_SUPABASE_PUBLISHABLE_KEY: "\(.*\)".*/\1/p')
+          [ -n "$key" ]
+          echo "$body" | grep -q 'VITE_SUPABASE_URL' && { echo "env.js must not carry an API address"; exit 1; }
+          echo "CI_ANON_KEY=$key" >> "$GITHUB_ENV"
+
+      - name: Secrets were generated and stored in the volume
+        run: |
+          docker compose exec -T db sh -c 'test -s /secrets/postgres_password'
+          docker compose exec -T app sh -c 'test -s /secrets/jwt_secret && test -s /secrets/cron_secret'
+          # ...owner-only
+          docker compose exec -T app sh -c 'test "$(stat -c %a /secrets/jwt_secret)" = 600'
 
       - name: Fresh instance reports no accounts yet
         run: |
-          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
           body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}")
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":false'
 
       - name: Sign up
         run: |
-          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
           code=$(curl -sS -o signup.json -w '%{http_code}' -X POST http://localhost:8080/auth/v1/signup \
-            -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
             -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')
           echo "HTTP ${code}"; cat signup.json; echo
           [ "$code" = "200" ]
@@ -130,42 +140,37 @@ jobs:
 
       - name: Log in
         run: |
-          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
           code=$(curl -sS -o login.json -w '%{http_code}' -X POST \
             "http://localhost:8080/auth/v1/token?grant_type=password" \
-            -H "apikey: ${ANON_KEY}" -H "Content-Type: application/json" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
             -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')
           echo "HTTP ${code}"
           [ "$code" = "200" ]
           grep -q '"access_token"' login.json
+          echo "CI_ACCESS_TOKEN=$(sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' login.json)" >> "$GITHUB_ENV"
 
       - name: Instance now reports an account exists (signup trigger + PostgREST + edge runtime)
         run: |
-          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
           body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}")
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":true'
 
       # Chrome/Edge send `Accept-Encoding: gzip, deflate, br, zstd`. With that
       # header the edge runtime accepted the request, ran the function, and
-      # never delivered the response (curl without it: ~5ms; Safari, which
-      # omits zstd, was unaffected). nginx now strips the header on
-      # /functions/v1/ — keep a hard check so it can't regress. curl alone
-      # never reproduced this until the header was sent explicitly.
+      # never delivered the response. nginx strips it on /functions/v1/ — keep
+      # a hard check so it can't regress.
       - name: Chromium-style Accept-Encoding (zstd) does not hang the edge runtime
         run: |
-          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
           curl -fsS --max-time 8 -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}" \
             -H "Accept-Encoding: gzip, deflate, br, zstd"
 
-      # The cron endpoint is only meant for Postgres (pg_cron) and is guarded
-      # by a shared secret; the function router must serve only the known
-      # functions (the name comes straight from the URL).
+      # The cron endpoint is only meant for Postgres (pg_cron) and is guarded by
+      # a shared secret; the function router must serve only the known functions.
       - name: Cron endpoint and function router reject what they should
         run: |
-          CRON_SECRET=$(grep '^CRON_SECRET=' .env | cut -d= -f2)
+          CRON_SECRET=$(docker compose exec -T app cat /secrets/cron_secret)
           code() { curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$@"; }
           fn=http://localhost:8080/functions/v1
           [ "$(code -X POST $fn/send-notifications)" = "401" ]
@@ -174,21 +179,44 @@ jobs:
           [ "$(code -X POST $fn/main)" = "404" ]
           [ "$(code -X POST $fn/does-not-exist)" = "404" ]
 
-      # env.js is rewritten from the container's env on every start, so it
-      # must carry this deployment's real key (derived from ANON_KEY) and
-      # must never be cached; the gateway also sets baseline security headers.
+      # env.js is rewritten from the container's env on every start, so it must
+      # carry this deployment's real key and must never be cached.
       - name: Runtime config is fresh and security headers are set
         run: |
-          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
           headers=$(curl -fsSI http://localhost:8080/env.js)
           echo "$headers"
           echo "$headers" | grep -i '^cache-control:' | grep -qi 'no-cache'
           echo "$headers" | grep -qi '^x-content-type-options: nosniff'
           echo "$headers" | grep -qi '^content-security-policy:'
-          curl -fsS http://localhost:8080/env.js | grep -qF "$ANON_KEY"
+          curl -fsS http://localhost:8080/env.js | grep -qF "$CI_ANON_KEY"
 
-      # The UI paths that depend on the runtime config injected into
-      # /env.js (widget URL, Delete Account) — see scripts/ui-smoke.mjs.
+      # What `docker compose pull && up -d` does: containers are recreated, the
+      # volumes stay. Secrets and the API key must be the same afterwards, the
+      # database password must still work, and a token issued before must still
+      # be accepted (i.e. the JWT secret was NOT regenerated).
+      - name: Survives a restart with the same secrets
+        run: |
+          fp() { docker compose exec -T "$1" sha256sum "/secrets/$2" | cut -d' ' -f1; }
+          jwt_before=$(fp app jwt_secret); cron_before=$(fp app cron_secret); pg_before=$(fp db postgres_password)
+          docker compose down
+          docker compose up -d
+          ./scripts/wait-for-stack.sh
+          [ "$jwt_before"  = "$(fp app jwt_secret)" ]
+          [ "$cron_before" = "$(fp app cron_secret)" ]
+          [ "$pg_before"   = "$(fp db postgres_password)" ]
+          key=$(curl -fsS http://localhost:8080/env.js | sed -n 's/.*VITE_SUPABASE_PUBLISHABLE_KEY: "\(.*\)".*/\1/p')
+          [ "$key" = "$CI_ANON_KEY" ]
+          # a token from before the restart is still valid...
+          [ "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/auth/v1/user \
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}")" = "200" ]
+          # ...and the account (i.e. the database, with its original password) is intact
+          [ "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://localhost:8080/auth/v1/token?grant_type=password" \
+            -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
+            -d '{"email":"ci-user@accounts.local","password":"ci-test-password-123"}')" = "200" ]
+
+      # The UI paths that depend on the runtime config. The app has no
+      # configured URL and must call whichever address it was opened at, so run
+      # the same flow against 127.0.0.1 (keeping the account) and then localhost.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
@@ -199,16 +227,94 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: UI smoke test (sign in, widget URL, delete account)
+      - name: UI smoke test via 127.0.0.1 (sign in, widget URL is that address)
+        run: BASE_URL=http://127.0.0.1:8080 SMOKE_KEEP_ACCOUNT=1 node scripts/ui-smoke.mjs
+
+      - name: UI smoke test via localhost (sign in, widget URL, delete account)
         run: node scripts/ui-smoke.mjs
 
       - name: Deleting the account really removed it (back to a fresh instance)
         run: |
-          ANON_KEY=$(grep '^ANON_KEY=' .env | cut -d= -f2)
           body=$(curl -fsS -X POST http://localhost:8080/functions/v1/instance-status \
-            -H "apikey: ${ANON_KEY}" -H "Authorization: Bearer ${ANON_KEY}")
+            -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ANON_KEY}")
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":false'
+
+      # Losing the secrets volume while keeping the database must NOT lead to a
+      # silently different password (the app would then fail to log in): the
+      # database container refuses to start and says why.
+      - name: Refuses to invent a database password if the secrets volume is lost
+        run: |
+          docker compose down
+          docker volume rm $(docker volume ls -q --filter label=com.docker.compose.volume=secrets)
+          docker compose up -d db
+          # Here-strings, not pipes: under `pipefail` a `logs | grep -q` can fail
+          # with SIGPIPE when grep exits early.
+          for i in $(seq 1 30); do
+            logs=$(docker compose logs db 2>&1)
+            grep -q "already exists, but its password isn't in" <<<"$logs" && break
+            sleep 2
+          done
+          grep "FATAL" <<<"$logs" || true
+          grep -q "already exists, but its password isn't in" <<<"$logs"
+          # ...and it did not come up healthy
+          ps=$(docker compose ps db 2>&1)
+          echo "$ps"
+          ! grep -q "(healthy)" <<<"$ps"
+          docker compose down
+
+      # An instance set up the old way (./setup.sh + .env, including SITE_URL)
+      # must keep working when the new images are pulled: supplied values are
+      # used as they are, SITE_URL is ignored, and nothing is generated.
+      - name: An old-style .env still works (upgrade path)
+        run: |
+          docker compose down -v
+          b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+          make_jwt() {
+            iat=$(date +%s); exp=$((iat + 315360000))
+            h=$(printf '%s' '{"alg":"HS256","typ":"JWT"}' | b64url)
+            p=$(printf '%s' "{\"role\":\"$1\",\"iss\":\"supabase\",\"iat\":${iat},\"exp\":${exp}}" | b64url)
+            s=$(printf '%s' "$h.$p" | openssl dgst -sha256 -hmac "$2" -binary | b64url)
+            printf '%s.%s.%s' "$h" "$p" "$s"
+          }
+          jwt=$(openssl rand -hex 32); anon=$(make_jwt anon "$jwt")
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)"
+            echo "POSTGRES_DB=postgres"
+            echo "POSTGRES_PORT=5432"
+            echo "JWT_SECRET=$jwt"
+            echo "JWT_EXP=3600"
+            echo "ANON_KEY=$anon"
+            echo "SERVICE_ROLE_KEY=$(make_jwt service_role "$jwt")"
+            echo "VITE_SUPABASE_PUBLISHABLE_KEY=$anon"
+            echo "CRON_SECRET=$(openssl rand -hex 32)"
+            echo "SITE_URL=http://localhost:8080/"
+            echo "APP_PORT=8080"
+          } > .env
+          docker compose up -d
+          ./scripts/wait-for-stack.sh
+          # Supplied values win: nothing is generated into the volume, and the
+          # supplied anon key (not a derived one) is what the frontend gets.
+          # Each check is named and its evidence printed, so a failure says which.
+          failed=0
+          check() { if "${@:2}"; then echo "  ok   - $1"; else echo "  FAIL - $1"; failed=1; fi; }
+          echo "--- /secrets in app:"; docker compose exec -T app ls -la /secrets || true
+          echo "--- /secrets in db:";  docker compose exec -T db  ls -la /secrets || true
+          app_files=$(docker compose exec -T app ls -A /secrets 2>&1 || true)
+          db_files=$(docker compose exec -T db ls -A /secrets 2>&1 || true)
+          key=$(curl -fsS http://localhost:8080/env.js | sed -n 's/.*VITE_SUPABASE_PUBLISHABLE_KEY: "\(.*\)".*/\1/p')
+          echo "--- anon key (public): supplied=${anon}"
+          echo "                        served =${key}"
+          check "app container generated nothing into /secrets" test -z "$app_files"
+          check "db container generated nothing into /secrets" test -z "$db_files"
+          check "frontend gets the supplied anon key" test "$key" = "$anon"
+          [ "$failed" = 0 ]
+          echo "CI_ANON_KEY=$anon" >> "$GITHUB_ENV"
+          code=$(curl -sS -o legacy-signup.json -w '%{http_code}' -X POST http://localhost:8080/auth/v1/signup \
+            -H "apikey: ${anon}" -H "Content-Type: application/json" \
+            -d '{"email":"legacy-user@accounts.local","password":"ci-test-password-123"}')
+          echo "HTTP ${code}"
+          [ "$code" = "200" ]
 
       # Deliberately the last functional step: it exhausts this client's
       # rate-limit bucket for a while, which would fail any sign-in after it.
@@ -218,7 +324,7 @@ jobs:
           for i in $(seq 1 60); do
             c=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
               "http://localhost:8080/auth/v1/token?grant_type=password" \
-              -H "apikey: $(grep '^ANON_KEY=' .env | cut -d= -f2)" -H "Content-Type: application/json" \
+              -H "apikey: ${CI_ANON_KEY}" -H "Content-Type: application/json" \
               -d '{"email":"nobody@accounts.local","password":"wrong-password"}')
             [ "$c" = "429" ] && limited=$((limited + 1))
           done
@@ -230,6 +336,8 @@ jobs:
         run: |
           echo "=== app startup markers ==="
           docker compose logs app | grep -E "\[start\]|auth function owner|FATAL|fatal" || true
+          echo "=== db startup markers ==="
+          docker compose logs db | grep -E "\[db\]|FATAL" || true
 
       - name: Dump logs on failure
         if: failure()

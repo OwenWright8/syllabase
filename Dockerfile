@@ -20,11 +20,15 @@
 # live GitHub Actions build/run of this exact Dockerfile, but re-verify
 # if you bump versions and a COPY step starts failing:
 #   docker run --rm --entrypoint find supabase/gotrue:<tag> / -maxdepth 3 -iname '*gotrue*'
-# Also re-verify these images exist for your host's architecture
-# (`docker manifest inspect <image>:<tag>`) before building on ARM (e.g.
-# a Raspberry Pi) — only confirmed on linux/amd64 so far.
+#
+# Built for linux/amd64 and linux/arm64 (Raspberry Pi, ARM servers): every
+# upstream image below publishes both. When bumping a version, confirm that
+# still holds (`docker buildx imagetools inspect <image>:<tag>`); CI builds the
+# arm64 image on every change so a missing architecture shows up straight away.
 
-FROM node:20-alpine AS frontend-build
+# The frontend is static files, so it is built once on the build machine's own
+# architecture (no emulation) and copied into every target image.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -38,7 +42,7 @@ FROM supabase/edge-runtime:v1.76.2 AS edge-runtime-src
 FROM nginx:1.27-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      postgresql-client gettext-base tini curl ca-certificates \
+      postgresql-client gettext-base tini curl ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=gotrue-src /usr/local/bin/gotrue /usr/local/bin/gotrue
@@ -53,6 +57,7 @@ COPY docker/migrate.sh /app/migrate.sh
 COPY docker/env.js.template /app/env.js.template
 COPY docker/nginx.app.conf /etc/nginx/conf.d/default.conf
 COPY docker/start.sh /app/start.sh
+COPY docker/secrets.sh /app/secrets.sh
 RUN chmod +x /app/start.sh /app/migrate.sh
 
 EXPOSE 8080

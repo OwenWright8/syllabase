@@ -67,7 +67,7 @@ export default defineConfig(({ mode }) => {
         // container's environment on every start (docker/start.sh). The copy
         // in dist/ is only a placeholder, so precaching it would pin
         // whatever config existed at build time and hide later changes
-        // (a rotated key, a new SITE_URL) behind the service worker.
+        // (a rotated key) behind the service worker.
         globIgnores: ['env.js'],
         // The API paths share this origin. A page navigation to one of them
         // is not an app route, so don't answer it with index.html.

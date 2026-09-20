@@ -221,6 +221,12 @@ export function addDaysYmd(ymd: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/** Whole days from `from` to `to` (negative if `to` is earlier). */
+export function daysBetweenYmd(from: string, to: string): number {
+  const ms = (ymd: string) => Date.parse(`${ymd}T00:00:00Z`);
+  return Math.round((ms(to) - ms(from)) / 86_400_000);
+}
+
 /** 0 (Sunday) … 6 (Saturday) for `date` in `timeZone`. */
 export function weekdayInTz(date: Date, timeZone: string): number {
   const name = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);

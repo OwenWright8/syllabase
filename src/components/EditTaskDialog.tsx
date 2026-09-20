@@ -35,9 +35,11 @@ interface EditTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  /** New tasks only: the day (YYYY-MM-DD) to plan the work for, if not today. The due date defaults to the day after. */
+  defaultDate?: string;
 }
 
-export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess }: EditTaskDialogProps) {
+export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess, defaultDate }: EditTaskDialogProps) {
   const { timezone } = useUserTimezone();
   const [formData, setFormData] = useState({
     title: "",
@@ -66,24 +68,25 @@ export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess }:
       });
     } else {
       // Reset form for new task
-      const today = getTodayInTimezone(timezone);
+      const workDay = defaultDate ?? getTodayInTimezone(timezone);
       // parseISO reads a bare "yyyy-MM-dd" as a local calendar date. `new Date()`
       // would read it as UTC midnight, which is the previous evening anywhere
       // west of UTC and shifted these defaults back a day.
-      const tomorrow = format(addDays(parseISO(today), 1), "yyyy-MM-dd");
+      // Due the day after the day it is planned for: tomorrow, unless a later day was chosen.
+      const defaultDue = format(addDays(parseISO(workDay), 1), "yyyy-MM-dd");
       setFormData({
         title: "",
         description: "",
         courseId: "none",
         type: "homework",
-        dueDate: tomorrow,
+        dueDate: defaultDue,
         dueTime: "23:59",
         workDate: "",
         estimatedMinutes: "60",
         priority: "medium",
       });
     }
-  }, [task, open, timezone]);
+  }, [task, open, timezone, defaultDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

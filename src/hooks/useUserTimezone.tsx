@@ -1,45 +1,49 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-interface UserPreferences {
-  timezone: string;
-  semesterStart: string | null;
-}
+export const DEFAULT_TIMEZONE = 'America/New_York';
 
+export const userPreferencesKeys = {
+  all: (userId: string) => ['user-preferences', userId] as const,
+};
+
+/**
+ * The user's timezone and semester start, read from their profile.
+ *
+ * Backed by react-query so every component shares one cached request instead
+ * of each firing its own, and so the value is already there when a page
+ * mounts. `loading` is true only until the *first* answer: pages that derive
+ * state from the timezone once (e.g. Today's initial date) should wait for it
+ * rather than lock in the default. Invalidate `userPreferencesKeys.all` after
+ * changing these on the Profile page.
+ */
 export function useUserTimezone() {
   const { user } = useAuth();
-  const [timezone, setTimezone] = useState<string>('America/New_York');
-  const [semesterStart, setSemesterStart] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchPreferences = async () => {
+  const { data, isLoading } = useQuery({
+    queryKey: userPreferencesKeys.all(user?.id ?? ''),
+    queryFn: async () => {
       try {
         const { data, error } = await supabase
           .from('profiles')
           .select('timezone, semester_start')
-          .eq('id', user.id)
+          .eq('id', user!.id)
           .single();
-
-        if (!error && data) {
-          if (data.timezone) setTimezone(data.timezone);
-          if (data.semester_start) setSemesterStart(data.semester_start);
-        }
+        if (error) throw error;
+        return data;
       } catch (error) {
+        // Fall back to the defaults rather than blocking the app on this.
         console.error('Error fetching user preferences:', error);
-      } finally {
-        setLoading(false);
+        return null;
       }
-    };
+    },
+    enabled: !!user,
+  });
 
-    fetchPreferences();
-  }, [user]);
-
-  return { timezone, semesterStart, loading };
+  return {
+    timezone: data?.timezone || DEFAULT_TIMEZONE,
+    semesterStart: data?.semester_start ?? null,
+    loading: !!user && isLoading,
+  };
 }

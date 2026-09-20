@@ -82,6 +82,7 @@ export function TaskCard({ task, isOverdue, onComplete, onEdit }: TaskCardProps)
         <div className="flex items-start gap-3 sm:gap-4">
           {/* Completion checkbox - Always visible on left for touch friendliness */}
           <button
+            type="button" aria-label={`Mark "${task.title}" complete`}
             onClick={handleComplete}
             disabled={isCompleting}
             className={cn(
@@ -145,6 +146,7 @@ export function TaskCard({ task, isOverdue, onComplete, onEdit }: TaskCardProps)
           {/* Edit button */}
           {onEdit && (
             <Button
+              aria-label={`Edit "${task.title}"`}
               variant="ghost"
               size="icon"
               onClick={() => onEdit(task)}

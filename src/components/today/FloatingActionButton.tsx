@@ -1,24 +1,33 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, ClipboardList, FileText, GraduationCap, BookOpen, BrainCircuit } from "lucide-react";
+import { Plus, X, ClipboardList, ClipboardCheck, FileText, GraduationCap, BookOpen, BrainCircuit } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SPRING, SPRING_SNAPPY, DURATION, EASE_OUT } from "@/lib/motion";
 
+export type QuickAddKind = "assignment" | "reading" | "study" | "exam" | "quiz" | "course";
+
 interface FloatingActionButtonProps {
+  /** Called with what the user picked; the caller opens the matching form in place. */
+  onSelect: (kind: QuickAddKind) => void;
   className?: string;
 }
 
-export function FloatingActionButton({ className }: FloatingActionButtonProps) {
+const actions: { kind: QuickAddKind; icon: typeof Plus; label: string; color: string }[] = [
+  { kind: "assignment", icon: ClipboardList, label: "Assignment", color: "bg-primary text-primary-foreground" },
+  { kind: "reading", icon: FileText, label: "Reading", color: "bg-info text-info-foreground" },
+  { kind: "study", icon: BrainCircuit, label: "Study Item", color: "bg-accent text-accent-foreground" },
+  { kind: "exam", icon: GraduationCap, label: "Exam", color: "bg-warning text-warning-foreground" },
+  { kind: "quiz", icon: ClipboardCheck, label: "Quiz", color: "bg-secondary text-secondary-foreground border border-border" },
+  { kind: "course", icon: BookOpen, label: "Course", color: "bg-success text-success-foreground" },
+];
+
+export function FloatingActionButton({ onSelect, className }: FloatingActionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const actions = [
-    { icon: ClipboardList, label: "Assignment", href: "/assignments", color: "bg-primary text-primary-foreground" },
-    { icon: FileText, label: "Reading", href: "/readings", color: "bg-info text-info-foreground" },
-    { icon: BrainCircuit, label: "Study Item", href: "/study", color: "bg-accent text-accent-foreground" },
-    { icon: GraduationCap, label: "Exam", href: "/exams", color: "bg-warning text-warning-foreground" },
-    { icon: BookOpen, label: "Course", href: "/courses", color: "bg-success text-success-foreground" },
-  ];
+  const handleSelect = (kind: QuickAddKind) => {
+    setIsOpen(false);
+    onSelect(kind);
+  };
 
   return (
     <div className={cn("fixed bottom-6 right-6 z-50", className)}>
@@ -52,9 +61,10 @@ export function FloatingActionButton({ className }: FloatingActionButtonProps) {
                 <span className="text-sm font-medium text-foreground bg-card px-3 py-1.5 rounded-lg border border-border shadow-soft-sm">
                   {action.label}
                 </span>
-                <Link
-                  to={action.href}
-                  onClick={() => setIsOpen(false)}
+                <button
+                  type="button"
+                  aria-label={`Add ${action.label}`}
+                  onClick={() => handleSelect(action.kind)}
                   className={cn(
                     "h-12 w-12 rounded-full flex items-center justify-center shadow-soft-lg",
                     "transition-smooth hover:scale-110 active:scale-95",
@@ -62,7 +72,7 @@ export function FloatingActionButton({ className }: FloatingActionButtonProps) {
                   )}
                 >
                   <action.icon className="h-5 w-5" />
-                </Link>
+                </button>
               </motion.div>
             ))}
           </div>
@@ -71,6 +81,9 @@ export function FloatingActionButton({ className }: FloatingActionButtonProps) {
 
       {/* Main FAB */}
       <motion.button
+        type="button"
+        aria-label={isOpen ? "Close quick add menu" : "Quick add"}
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           "h-14 w-14 rounded-full flex items-center justify-center",

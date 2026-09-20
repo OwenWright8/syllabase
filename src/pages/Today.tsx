@@ -7,7 +7,8 @@ import { ActivityHeatmap } from "@/components/today/ActivityHeatmap";
 import { ComingUpSection } from "@/components/today/ComingUpSection";
 import { BentoEmptyState } from "@/components/today/BentoEmptyState";
 import { BentoExamCountdown } from "@/components/today/BentoExamCountdown";
-import { FloatingActionButton } from "@/components/today/FloatingActionButton";
+import { FloatingActionButton, QuickAddKind } from "@/components/today/FloatingActionButton";
+import { QuickAddDialogs } from "@/components/today/QuickAddDialogs";
 import { TaskSection } from "@/components/today/TaskSection";
 import { UpcomingReadingsWidget } from "@/components/readings/UpcomingReadingsWidget";
 import { UpcomingStudyWidget } from "@/components/study/UpcomingStudyWidget";
@@ -33,6 +34,26 @@ function getGreeting(): { text: string; icon: typeof Sun } {
 }
 
 export default function Today() {
+  const { loading } = useUserTimezone();
+
+  // The selected date and week below are derived once, from the timezone, on
+  // first render. Waiting for the profile's timezone (instead of starting from
+  // the New York default) keeps Today from opening on the wrong day for anyone
+  // whose calendar date differs from New York's.
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent"></div>
+        </div>
+      </Layout>
+    );
+  }
+
+  return <TodayView />;
+}
+
+function TodayView() {
   const { timezone } = useUserTimezone();
   const { data: allTasks = [], isLoading } = useUserTasks();
   const { data: upcomingExams = [] } = useUpcomingExams();
@@ -40,6 +61,7 @@ export default function Today() {
   const markTaskDone = useMarkTaskDone();
   const [selectedDate, setSelectedDate] = useState(nowInTimezone(timezone));
   const [weekStart, setWeekStart] = useState(startOfWeek(nowInTimezone(timezone)));
+  const [quickAdd, setQuickAdd] = useState<QuickAddKind | null>(null);
   const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
   const {
@@ -60,6 +82,9 @@ export default function Today() {
   ], [upcomingExams, upcomingQuizzes]);
 
   const isSelectedToday = isSameDay(selectedDate, nowInTimezone(timezone));
+  // Quick-add plans for the day being viewed, but only when it is ahead of
+  // today: a past day would make a new assignment due in the past.
+  const quickAddDate = selectedDateStr > format(nowInTimezone(timezone), "yyyy-MM-dd") ? selectedDateStr : undefined;
   const greeting = getGreeting();
   const GreetingIcon = greeting.icon;
 
@@ -426,8 +451,9 @@ export default function Today() {
           </div>
         </div>
 
-        {/* Floating Action Button */}
-        <FloatingActionButton />
+        {/* Quick add: the "+" menu opens the create form right here */}
+        <FloatingActionButton onSelect={setQuickAdd} />
+        <QuickAddDialogs active={quickAdd} onClose={() => setQuickAdd(null)} defaultDate={quickAddDate} />
       </div>
     </Layout>
   );

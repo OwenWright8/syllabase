@@ -27,7 +27,28 @@ jobs:
 
       - run: npx tsc --noEmit -p tsconfig.app.json
 
+      # Playwright transpiles specs without type-checking them.
+      - run: npx tsc --noEmit -p e2e/tsconfig.json
+
       - run: npm run build
+
+  # Browser tests against the real UI, with the backend replaced by an
+  # in-memory fake (e2e/support/fakeBackend.ts) — no Docker or database needed.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e
 
   docker:
     runs-on: ubuntu-latest

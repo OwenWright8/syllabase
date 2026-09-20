@@ -100,7 +100,7 @@ export function Layout({ children }: LayoutProps) {
               {/* Mobile menu trigger */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden h-10 w-10 rounded-xl">
+                  <Button aria-label="Open menu" variant="ghost" size="icon" className="md:hidden h-10 w-10 rounded-xl">
                     <Menu className="h-5 w-5" />
                   </Button>
                 </SheetTrigger>

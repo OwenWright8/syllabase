@@ -4,12 +4,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { useCourses } from "@/hooks/useCourses";
 import { examKeys, useExams } from "@/hooks/useExams";
-import { useQuizzes } from "@/hooks/useQuizzes";
+import { quizKeys, useQuizzes } from "@/hooks/useQuizzes";
 import { useReadings } from "@/hooks/useReadings";
 import { useStudyItems } from "@/hooks/useStudyItems";
 import { taskKeys } from "@/hooks/useTasks";
 import { EditTaskDialog } from "@/components/EditTaskDialog";
 import { CreateExamDialog } from "@/components/CreateExamDialog";
+import { CreateQuizDialog } from "@/components/CreateQuizDialog";
 import { CreateCourseDialog } from "@/components/CreateCourseDialog";
 import { CreateReadingDialog } from "@/components/readings/CreateReadingDialog";
 import { CreateStudyItemDialog } from "@/components/study/CreateStudyItemDialog";
@@ -19,6 +20,12 @@ interface QuickAddDialogsProps {
   /** Which create form is open, or null for none. */
   active: QuickAddKind | null;
   onClose: () => void;
+  /**
+   * A day (YYYY-MM-DD) to plan for when the user is looking at one ahead of
+   * today: assignments are planned for it, exams and quizzes pre-fill it.
+   * Leave undefined for today or a past day, which keep the normal defaults.
+   */
+  defaultDate?: string;
 }
 
 // The create forms behind the Today page's "+" menu, opened in place so adding
@@ -26,7 +33,7 @@ interface QuickAddDialogsProps {
 // Assignments / Readings / Study / Exams / Courses pages use, and each one
 // invalidates the queries the Today page reads from when it saves, so the new
 // item shows up here straight away.
-export function QuickAddDialogs({ active, onClose }: QuickAddDialogsProps) {
+export function QuickAddDialogs({ active, onClose, defaultDate }: QuickAddDialogsProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { timezone } = useUserTimezone();
@@ -49,6 +56,10 @@ export function QuickAddDialogs({ active, onClose }: QuickAddDialogsProps) {
     if (user) queryClient.invalidateQueries({ queryKey: examKeys.all(user.id) });
   };
 
+  const refreshQuizzes = () => {
+    if (user) queryClient.invalidateQueries({ queryKey: quizKeys.all(user.id) });
+  };
+
   return (
     <>
       <EditTaskDialog
@@ -57,6 +68,7 @@ export function QuickAddDialogs({ active, onClose }: QuickAddDialogsProps) {
         open={active === "assignment"}
         onOpenChange={onOpenChange}
         onSuccess={refreshTasks}
+        defaultDate={defaultDate}
       />
 
       <CreateReadingDialog
@@ -81,6 +93,16 @@ export function QuickAddDialogs({ active, onClose }: QuickAddDialogsProps) {
         onOpenChange={onOpenChange}
         onSuccess={refreshExams}
         timezone={timezone}
+        defaultDate={defaultDate}
+      />
+
+      <CreateQuizDialog
+        courses={courses}
+        open={active === "quiz"}
+        onOpenChange={onOpenChange}
+        onSuccess={refreshQuizzes}
+        timezone={timezone}
+        defaultDate={defaultDate}
       />
 
       <CreateCourseDialog open={active === "course"} onOpenChange={onOpenChange} />

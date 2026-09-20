@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, ClipboardList, FileText, GraduationCap, BookOpen, BrainCircuit } from "lucide-react";
+import { Plus, X, ClipboardList, ClipboardCheck, FileText, GraduationCap, BookOpen, BrainCircuit } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SPRING, SPRING_SNAPPY, DURATION, EASE_OUT } from "@/lib/motion";
 
-export type QuickAddKind = "assignment" | "reading" | "study" | "exam" | "course";
+export type QuickAddKind = "assignment" | "reading" | "study" | "exam" | "quiz" | "course";
 
 interface FloatingActionButtonProps {
   /** Called with what the user picked; the caller opens the matching form in place. */
@@ -17,6 +17,7 @@ const actions: { kind: QuickAddKind; icon: typeof Plus; label: string; color: st
   { kind: "reading", icon: FileText, label: "Reading", color: "bg-info text-info-foreground" },
   { kind: "study", icon: BrainCircuit, label: "Study Item", color: "bg-accent text-accent-foreground" },
   { kind: "exam", icon: GraduationCap, label: "Exam", color: "bg-warning text-warning-foreground" },
+  { kind: "quiz", icon: ClipboardCheck, label: "Quiz", color: "bg-secondary text-secondary-foreground border border-border" },
   { kind: "course", icon: BookOpen, label: "Course", color: "bg-success text-success-foreground" },
 ];
 

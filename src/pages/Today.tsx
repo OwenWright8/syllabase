@@ -82,6 +82,9 @@ function TodayView() {
   ], [upcomingExams, upcomingQuizzes]);
 
   const isSelectedToday = isSameDay(selectedDate, nowInTimezone(timezone));
+  // Quick-add plans for the day being viewed, but only when it is ahead of
+  // today: a past day would make a new assignment due in the past.
+  const quickAddDate = selectedDateStr > format(nowInTimezone(timezone), "yyyy-MM-dd") ? selectedDateStr : undefined;
   const greeting = getGreeting();
   const GreetingIcon = greeting.icon;
 
@@ -450,7 +453,7 @@ function TodayView() {
 
         {/* Quick add: the "+" menu opens the create form right here */}
         <FloatingActionButton onSelect={setQuickAdd} />
-        <QuickAddDialogs active={quickAdd} onClose={() => setQuickAdd(null)} />
+        <QuickAddDialogs active={quickAdd} onClose={() => setQuickAdd(null)} defaultDate={quickAddDate} />
       </div>
     </Layout>
   );

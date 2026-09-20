@@ -11,6 +11,19 @@
 # working via a live build+run in CI on linux/amd64; re-verify with
 # `docker manifest inspect <image>:<tag>` before relying on this on
 # another architecture (e.g. a Raspberry Pi).
+#
+# Every secret below uses `${VAR:?message}`, so `docker compose` stops with a
+# clear error if .env is missing or a value is empty, instead of starting
+# with a blank password or an unauthenticated cron endpoint. Run
+# ./setup.sh to generate them all.
+
+x-logging: &default-logging
+  # Docker's default json-file driver never rotates, so a long-running
+  # instance would eventually fill its disk with request logs.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   db:
@@ -26,10 +39,11 @@ services:
       dockerfile: Dockerfile.db
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run ./setup.sh}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set - run ./setup.sh}
       JWT_EXP: ${JWT_EXP:-3600}
+    logging: *default-logging
     # No further `command:` override here on purpose — this image's
     # default command/entrypoint sets up shared_preload_libraries and
     # other internal config its own init scripts depend on
@@ -39,8 +53,14 @@ services:
     # shared_preload_libraries" error during first boot.
     volumes:
       - db-data:/var/lib/postgresql/data
+    # Bound to loopback: the app reaches Postgres over the compose network,
+    # so this mapping only exists for psql/backups run on the host itself.
+    # Publishing it on all interfaces would put the database (and its
+    # superuser login) on the network — and Docker's port publishing goes
+    # around host firewalls such as ufw. Change the address here only if you
+    # deliberately want remote database access.
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -61,15 +81,17 @@ services:
       db:
         condition: service_healthy
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run ./setup.sh}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set - run ./setup.sh}
       JWT_EXP: ${JWT_EXP:-3600}
-      ANON_KEY: ${ANON_KEY}
-      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
-      CRON_SECRET: ${CRON_SECRET}
-      SITE_URL: ${SITE_URL}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+      ANON_KEY: ${ANON_KEY:?ANON_KEY is not set - run ./setup.sh}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY is not set - run ./setup.sh}
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is not set - run ./setup.sh}
+      SITE_URL: ${SITE_URL:?SITE_URL is not set - edit .env}
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${APP_PORT:-8080}:8080"
 

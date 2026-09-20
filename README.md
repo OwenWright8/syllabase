@@ -26,9 +26,9 @@ services:
     image: ghcr.io/owenwright8/syllabase-db:latest
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./setup.sh}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?run ./setup.sh}
       JWT_EXP: ${JWT_EXP:-3600}
     volumes:
       - db-data:/var/lib/postgresql/data
@@ -45,15 +45,16 @@ services:
       db:
         condition: service_healthy
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./setup.sh}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?run ./setup.sh}
       JWT_EXP: ${JWT_EXP:-3600}
-      ANON_KEY: ${ANON_KEY}
-      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
-      CRON_SECRET: ${CRON_SECRET}
-      SITE_URL: ${SITE_URL}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+      ANON_KEY: ${ANON_KEY:?run ./setup.sh}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?run ./setup.sh}
+      CRON_SECRET: ${CRON_SECRET:?run ./setup.sh}
+      SITE_URL: ${SITE_URL:?set SITE_URL in .env}
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${APP_PORT:-8080}:8080"
 
@@ -67,7 +68,7 @@ Then grab [`.env.example`](.env.example) and [`setup.sh`](setup.sh) next to it (
 ./setup.sh
 ```
 
-This generates `.env` with every secret (`POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `CRON_SECRET`) filled in automatically — no manual JWT signing. Open `.env` and set the one value that can't be guessed for you:
+This generates `.env` (readable only by you) with every secret (`POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `CRON_SECRET`) filled in automatically — no manual JWT signing. Open `.env` and set the one value that can't be guessed for you:
 
 ```
 SITE_URL=https://your-domain.example
@@ -81,7 +82,16 @@ docker compose up -d
 
 That's it — `app` pulls the prebuilt image from GHCR by default (published by the [Release workflow](.github/workflows/release.yml) on every tagged version), Postgres comes up alongside it, and migrations apply automatically on first boot. If you'd rather build from source, swap `image:` for `build: { context: ., dockerfile: Dockerfile }` (or just run `docker compose build` from a full checkout, which the repo's own `docker-compose.yml` is already set up for).
 
-Visit the site: since this is a fresh instance with no accounts yet, you'll be prompted to create one. Every visit after that shows the normal sign in / sign up screen — anyone with the URL can create their own account and their own private data (there's no email verification since there's no SMTP server involved), so keep that in mind if you're putting this on the open internet rather than behind a VPN/private network.
+Visit the site: since this is a fresh instance with no accounts yet, you'll be prompted to create one. Every visit after that shows the normal sign in / sign up screen — anyone with the URL can create their own account and their own private data (there's no email verification since there's no SMTP server involved), so keep that in mind if you're putting this on the open internet rather than behind a VPN/private network. See [Security notes](#security-notes) below.
+
+### Security notes
+
+- **Put it behind HTTPS.** The `app` container speaks plain HTTP on `APP_PORT`. Run it behind a reverse proxy (Caddy, Traefik, nginx…) that terminates TLS, and set `SITE_URL` to the public `https://` URL. Passwords and session tokens cross the wire on every request, so don't expose the plain-HTTP port to the internet.
+- **Sign-up is open.** Anyone who can reach the URL can create an account (each account only ever sees its own data). If that isn't what you want, keep the instance on a private network/VPN or restrict access at your reverse proxy.
+- **Postgres is not exposed to the network.** The app talks to it over the internal compose network; the quickstart above doesn't publish its port at all, and the repo's `docker-compose.yml` publishes it on `127.0.0.1` only (for `psql`/backups from the host). Don't change that mapping to `0.0.0.0` unless you really want remote database access — Docker's port publishing bypasses host firewalls such as `ufw`.
+- **Guard `.env`.** It contains the database password, the JWT signing secret, and the service-role key; anyone holding those has full access to the instance. `setup.sh` creates it owner-only — keep it out of version control and backups you don't trust.
+- **Sign-in attempts are rate limited** per client IP at the gateway. Behind a reverse proxy, make sure it forwards the client address in `X-Forwarded-For` (most do by default) so the limit applies per person rather than to the proxy as a whole.
+- **Updating:** `docker compose pull && docker compose up -d`. Migrations apply automatically, each in its own transaction. Your data lives in the `db-data` volume — back that up (or use `pg_dump`) before upgrading.
 
 ### Notifications (optional)
 

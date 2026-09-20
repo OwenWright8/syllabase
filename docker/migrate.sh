@@ -29,9 +29,14 @@ for file in "$MIGRATIONS_DIR"/*.sql; do
   fi
 
   echo "apply $name"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
-    "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('${version}')"
+  # One transaction per migration, covering both the schema change and the
+  # bookkeeping row: if any statement fails the whole file rolls back.
+  # Applied separately, a failure halfway through left the migration
+  # half-applied but unrecorded, so every restart re-ran it and tripped on
+  # the parts that had already landed (a permanent crash loop).
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
+    -f "$file" \
+    -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('${version}')"
 done
 
 echo "All migrations applied."

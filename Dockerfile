@@ -49,14 +49,20 @@ COPY --from=frontend-build /app/dist /app/frontend
 COPY supabase/functions /app/functions
 COPY supabase/migrations /app/migrations
 COPY docker/migrate.sh /app/migrate.sh
-COPY docker/env.js.template /app/frontend/env.js.template
+# Kept outside the web root (/app/frontend) so it isn't served publicly.
+COPY docker/env.js.template /app/env.js.template
 COPY docker/nginx.app.conf /etc/nginx/conf.d/default.conf
 COPY docker/start.sh /app/start.sh
 RUN chmod +x /app/start.sh /app/migrate.sh
 
 EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s \
-  CMD curl -f http://localhost:8080/ || exit 1
+# Probes GoTrue through the gateway, not just nginx: nginx serves the static
+# frontend even when a backend is down, so `GET /` alone reports healthy for
+# an instance nobody can sign in to. (start.sh also stops the container if a
+# backend process dies; this covers one that's up but not answering.) The
+# long start period covers GoTrue's own first-boot schema migrations.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s \
+  CMD curl -fsS -o /dev/null http://localhost:8080/auth/v1/health || exit 1
 
 ENTRYPOINT ["tini", "--"]
 CMD ["/app/start.sh"]

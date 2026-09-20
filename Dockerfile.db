@@ -5,8 +5,17 @@
 # their password set to POSTGRES_PASSWORD, and those services fail with
 # "password authentication failed" (confirmed against a live run). Baked
 # into the image (not bind-mounted) so a self-hoster only needs
-# docker-compose.yml + .env, not a full repo checkout, to run this.
+# docker-compose.yml, not a full repo checkout, to run this.
 FROM supabase/postgres:17.6.1.136
 
 COPY docker/init/roles.sql /docker-entrypoint-initdb.d/init-scripts/99-roles.sql
 COPY docker/init/jwt.sql /docker-entrypoint-initdb.d/init-scripts/99-jwt.sql
+
+# Generates the database password on first start (into the shared /secrets
+# volume) when none is supplied, then runs the base image's own entrypoint —
+# see the script. Setting ENTRYPOINT in a child image RESETS the inherited CMD,
+# so the base image's command is restated here exactly (it is what points
+# Postgres at its config in /etc/postgresql, which the image's setup needs).
+COPY --chmod=0755 docker/db-entrypoint.sh /usr/local/bin/syllabase-db-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/syllabase-db-entrypoint.sh"]
+CMD ["postgres", "-D", "/etc/postgresql"]

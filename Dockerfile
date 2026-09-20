@@ -38,7 +38,7 @@ FROM supabase/edge-runtime:v1.76.2 AS edge-runtime-src
 FROM nginx:1.27-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      postgresql-client gettext-base tini curl ca-certificates \
+      postgresql-client gettext-base tini curl ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=gotrue-src /usr/local/bin/gotrue /usr/local/bin/gotrue
@@ -53,6 +53,7 @@ COPY docker/migrate.sh /app/migrate.sh
 COPY docker/env.js.template /app/env.js.template
 COPY docker/nginx.app.conf /etc/nginx/conf.d/default.conf
 COPY docker/start.sh /app/start.sh
+COPY docker/secrets.sh /app/secrets.sh
 RUN chmod +x /app/start.sh /app/migrate.sh
 
 EXPOSE 8080

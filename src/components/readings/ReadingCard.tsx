@@ -91,6 +91,7 @@ export function ReadingCard({
         )}
       >
         <button
+          type="button" aria-label={reading.status === "done" ? "Mark not started" : "Mark done"}
           onClick={() => onStatusChange(reading.id, reading.status === "done" ? "not_started" : "done")}
           className="flex-shrink-0"
         >
@@ -155,7 +156,7 @@ export function ReadingCard({
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button aria-label={`More actions for ${reading.title}`} variant="ghost" size="icon" className="h-8 w-8">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>

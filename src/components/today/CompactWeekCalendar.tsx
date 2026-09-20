@@ -28,6 +28,7 @@ export function CompactWeekCalendar({
     <div className="glass rounded-2xl p-3 shadow-soft-md">
       <div className="flex items-center gap-2">
         <Button
+          aria-label="Previous week"
           variant="ghost"
           size="icon"
           onClick={onPreviousWeek}
@@ -109,6 +110,7 @@ export function CompactWeekCalendar({
         </div>
 
         <Button
+          aria-label="Next week"
           variant="ghost"
           size="icon"
           onClick={onNextWeek}

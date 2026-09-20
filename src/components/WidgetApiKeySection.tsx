@@ -109,7 +109,7 @@ export function WidgetApiKeySection() {
           </p>
           <div className="flex items-center gap-2">
             <Input value={newKey} readOnly className="rounded-xl font-mono text-xs" />
-            <Button size="icon" variant="outline" className="rounded-xl shrink-0" onClick={handleCopy}>
+            <Button aria-label="Copy API key" size="icon" variant="outline" className="rounded-xl shrink-0" onClick={handleCopy}>
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </Button>
           </div>
@@ -160,6 +160,7 @@ export function WidgetApiKeySection() {
                 </p>
               </div>
               <Button
+                aria-label={`Revoke ${key.label || "key"}`}
                 size="icon"
                 variant="ghost"
                 className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive shrink-0"

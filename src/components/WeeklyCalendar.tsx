@@ -32,6 +32,7 @@ export function WeeklyCalendar({
         </h2>
         <div className="flex gap-1 sm:gap-2">
           <Button
+            aria-label="Previous week"
             variant="outline"
             size="icon"
             onClick={onPreviousWeek}
@@ -40,6 +41,7 @@ export function WeeklyCalendar({
             <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
           </Button>
           <Button
+            aria-label="Next week"
             variant="outline"
             size="icon"
             onClick={onNextWeek}

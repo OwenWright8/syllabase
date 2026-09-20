@@ -88,10 +88,10 @@ export function ExamCalendar({ exams, quizzes = [], timezone, onExamClick, onQui
                 <Button variant="outline" size="sm" onClick={goToToday}>
                   Today
                 </Button>
-                <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
+                <Button aria-label="Previous month" variant="outline" size="icon" onClick={goToPreviousMonth}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="icon" onClick={goToNextMonth}>
+                <Button aria-label="Next month" variant="outline" size="icon" onClick={goToNextMonth}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>

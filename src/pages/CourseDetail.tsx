@@ -82,7 +82,7 @@ export default function CourseDetail() {
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/courses")} className="self-start">
+          <Button aria-label="Back to courses" variant="ghost" size="icon" onClick={() => navigate("/courses")} className="self-start">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1">

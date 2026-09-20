@@ -1,5 +1,5 @@
-// Re-export directly from @playwright/test. No custom auth/session fixture
-// exists yet — there's no test Supabase project to authenticate against
-// (see e2e/README or CI workflow notes), so tests are limited to
-// unauthenticated pages for now.
+// Re-exports from @playwright/test so specs import from one place. The
+// backend the specs run against is the in-memory fake in e2e/support/
+// fakeBackend.ts (installed per test with installFakeBackend).
 export { test, expect } from "@playwright/test";
+export type { Page } from "@playwright/test";

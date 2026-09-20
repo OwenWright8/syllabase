@@ -43,6 +43,7 @@ export function PlannerItemRow({
       {mode === "plan" && (
         <div className="flex flex-col -my-1 shrink-0">
           <button
+            type="button" aria-label="Move up"
             onClick={onMoveUp}
             disabled={!canMoveUp}
             className="h-4 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:hover:text-muted-foreground"
@@ -50,6 +51,7 @@ export function PlannerItemRow({
             <ChevronUp className="h-3.5 w-3.5" />
           </button>
           <button
+            type="button" aria-label="Move down"
             onClick={onMoveDown}
             disabled={!canMoveDown}
             className="h-4 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:hover:text-muted-foreground"

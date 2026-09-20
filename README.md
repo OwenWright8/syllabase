@@ -139,3 +139,13 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 - **UI**: Tailwind CSS + shadcn/ui
 - **Backend / DB**: Self-hosted Supabase-compatible stack (Postgres + GoTrue auth + PostgREST + Edge Functions), with nginx as the internal gateway
 - **Deployment**: Docker Compose (2 containers: Postgres + one all-in-one app container)
+
+## Development
+
+```sh
+npm ci
+npm run dev        # http://localhost:8080 — point VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY at a running instance
+npm run test:e2e   # Playwright; needs no backend (see below)
+```
+
+The end-to-end tests (`e2e/`) drive the real UI in Chromium against an in-memory fake of the backend (`e2e/support/fakeBackend.ts`), installed by intercepting network requests — so they run with no server, database or Docker. Run `npx playwright install chromium` once first.

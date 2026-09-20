@@ -4,10 +4,27 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.81.1'
 // user's notification settings and pushes anything newly due through
 // Pushover. Runs with the service role and is protected by a shared
 // secret header instead of a user JWT, since pg_net has no Supabase
-// session to attach — verify_jwt is disabled for this function at deploy
-// time and this header check is what actually guards it.
+// session to attach — this header check is what actually guards it, so it
+// fails closed: with no CRON_SECRET configured the function refuses to run
+// rather than being open to anyone who can reach the gateway.
 
 const DEFAULT_TIMEZONE = 'America/New_York'
+
+/** Constant-time string comparison (hashes first so lengths never leak). */
+async function secretsMatch(provided: string | null, expected: string): Promise<boolean> {
+  const encoder = new TextEncoder()
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(provided ?? '')),
+    crypto.subtle.digest('SHA-256', encoder.encode(expected)),
+  ])
+  const av = new Uint8Array(a)
+  const bv = new Uint8Array(b)
+  let diff = 0
+  for (let i = 0; i < av.length; i++) diff |= av[i] ^ bv[i]
+  return diff === 0
+}
+
+const jsonHeaders = { 'Content-Type': 'application/json' }
 
 /** Calendar date (YYYY-MM-DD) that `date` falls on in `timezone`. */
 function ymdInTz(date: Date, timezone: string): string {
@@ -52,8 +69,12 @@ interface Candidate {
 
 Deno.serve(async (req) => {
   const cronSecret = Deno.env.get('CRON_SECRET')
-  if (cronSecret && req.headers.get('x-cron-secret') !== cronSecret) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+  if (!cronSecret) {
+    console.error('CRON_SECRET is not set; refusing to run the notification sweep')
+    return new Response(JSON.stringify({ error: 'Server misconfigured' }), { status: 500, headers: jsonHeaders })
+  }
+  if (!(await secretsMatch(req.headers.get('x-cron-secret'), cronSecret))) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: jsonHeaders })
   }
 
   const supabase = createClient(
@@ -225,14 +246,13 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ usersProcessed, notificationsSent }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders,
     })
   } catch (error) {
     console.error('Unexpected error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return new Response(JSON.stringify({ error: message }), {
+    return new Response(JSON.stringify({ error: 'An unexpected error occurred' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders,
     })
   }
 })

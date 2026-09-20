@@ -12,6 +12,25 @@
 // secrets and expect no session at all). A blanket gate here would
 // incorrectly block the latter two.
 
+// Only these names are routable. The name comes straight from the request
+// URL, so without an allowlist it would be used to build a filesystem path
+// (and could point a worker at `main` itself or any other directory under
+// /app/functions). Add new functions here as well as under
+// supabase/functions/.
+const FUNCTIONS = new Set([
+  "delete-user",
+  "instance-status",
+  "send-notifications",
+  "test-pushover-notification",
+  "widget-stats",
+]);
+
+const json = (body: unknown, status: number) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
 console.log("main function router started");
 
 Deno.serve(async (req: Request) => {
@@ -20,10 +39,11 @@ Deno.serve(async (req: Request) => {
   const serviceName = pathParts[1];
 
   if (!serviceName) {
-    return new Response(JSON.stringify({ msg: "missing function name in request" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ msg: "missing function name in request" }, 400);
+  }
+
+  if (!FUNCTIONS.has(serviceName)) {
+    return json({ msg: "function not found" }, 404);
   }
 
   const servicePath = `/app/functions/${serviceName}`;
@@ -38,10 +58,8 @@ Deno.serve(async (req: Request) => {
     });
     return await worker.fetch(req);
   } catch (e) {
-    const message = e instanceof Error ? e.toString() : String(e);
-    return new Response(JSON.stringify({ msg: message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    // Log the detail server-side; the client only needs to know it failed.
+    console.error(`function "${serviceName}" failed:`, e);
+    return json({ msg: "function failed to run" }, 500);
   }
 });

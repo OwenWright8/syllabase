@@ -7,12 +7,17 @@
 // "undefined/functions/v1/..." because they read the build-time env
 // instead of the runtime config.
 //
-// Expects the account created by the earlier CI signup step.
+// Expects the account created by the earlier CI signup step. Run it against
+// more than one address (BASE_URL=http://127.0.0.1:8080, then localhost): the
+// app has no configured URL and must use whichever address it was opened at,
+// which the widget-URL check below verifies. SMOKE_KEEP_ACCOUNT=1 skips the
+// final Delete Account step so the account survives for the next run.
 import { chromium } from "playwright";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
 const USER = process.env.SMOKE_USER ?? "ci-user";
 const PASS = process.env.SMOKE_PASS ?? "ci-test-password-123";
+const KEEP_ACCOUNT = process.env.SMOKE_KEEP_ACCOUNT === "1";
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -45,6 +50,12 @@ await page.locator("details pre").waitFor({ state: "attached", timeout: 20000 })
 const snippet = await page.locator("details pre").textContent();
 if (snippet.includes("undefined/functions")) await fail("widget URL contains 'undefined/functions'");
 if (!snippet.includes(`url: ${BASE}/functions/v1/widget-stats`)) await fail(`widget URL is not ${BASE}/functions/v1/widget-stats`);
+
+if (KEEP_ACCOUNT) {
+  await browser.close();
+  console.log(`UI smoke test passed at ${BASE} (account kept)`);
+  process.exit(0);
+}
 
 console.log("3. Delete Account calls the right URL and succeeds");
 const deleteResponse = page.waitForResponse((r) => r.url().includes("delete-user"), { timeout: 20000 });

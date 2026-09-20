@@ -4,69 +4,25 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { Course, courseKeys, useCourses, useCreateCourse, useToggleCourseArchive } from "@/hooks/useCourses";
+import { Course, courseKeys, useCourses, useToggleCourseArchive } from "@/hooks/useCourses";
 import { EditCourseDialog } from "@/components/EditCourseDialog";
+import { CreateCourseDialog } from "@/components/CreateCourseDialog";
 import { Plus, Edit, Archive, ArchiveRestore, GraduationCap, BookOpen, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-
-const colorOptions = [
-  "#3b82f6", // blue
-  "#10b981", // green
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#8b5cf6", // violet
-  "#ec4899", // pink
-  "#06b6d4", // cyan
-  "#f97316", // orange
-];
 
 export default function Courses() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: courses = [], isLoading } = useCourses();
-  const createCourse = useCreateCourse();
   const toggleCourseArchive = useToggleCourseArchive();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editCourse, setEditCourse] = useState<Course | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    shortCode: "",
-    color: colorOptions[0],
-    semester: "",
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      await createCourse.mutateAsync({
-        name: formData.name,
-        short_code: formData.shortCode,
-        color: formData.color,
-        semester: formData.semester || null,
-      });
-      toast.success("Course created successfully");
-      setDialogOpen(false);
-      setFormData({
-        name: "",
-        shortCode: "",
-        color: colorOptions[0],
-        semester: "",
-      });
-    } catch {
-      // Surfaced by the global mutation error handler.
-    }
-  };
 
   const handleEditSuccess = () => {
     if (user) queryClient.invalidateQueries({ queryKey: courseKeys.all(user.id) });
@@ -112,89 +68,10 @@ export default function Courses() {
             </p>
           </div>
           
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 rounded-xl h-10">
-                <Plus className="h-4 w-4" />
-                New Course
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="glass-strong border-border/50">
-              <DialogHeader>
-                <DialogTitle>Create New Course</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Course Name *</Label>
-                  <Input
-                    id="name"
-                    placeholder="e.g. General Chemistry"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="mt-1 rounded-xl"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="shortCode">Short Code *</Label>
-                  <Input
-                    id="shortCode"
-                    placeholder="e.g. CHEM 111"
-                    value={formData.shortCode}
-                    onChange={(e) => setFormData({ ...formData, shortCode: e.target.value })}
-                    className="mt-1 rounded-xl"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="semester">Semester</Label>
-                  <Input
-                    id="semester"
-                    placeholder="e.g. Spring 2024"
-                    value={formData.semester}
-                    onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
-                    className="mt-1 rounded-xl"
-                  />
-                </div>
-
-                <div>
-                  <Label>Color *</Label>
-                  <div className="flex gap-2 mt-2">
-                    {colorOptions.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, color })}
-                        className={cn(
-                          "w-10 h-10 rounded-full transition-all",
-                          formData.color === color 
-                            ? "ring-4 ring-ring scale-110" 
-                            : "hover:scale-105"
-                        )}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => setDialogOpen(false)}
-                    className="rounded-xl"
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" className="rounded-xl">
-                    Create Course
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setDialogOpen(true)} className="gap-2 rounded-xl h-10">
+            <Plus className="h-4 w-4" />
+            New Course
+          </Button>
         </div>
 
         {/* Stats */}
@@ -397,6 +274,8 @@ export default function Courses() {
             )}
           </div>
         )}
+
+        <CreateCourseDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 
         {editCourse && (
           <EditCourseDialog

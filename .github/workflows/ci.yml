@@ -55,6 +55,45 @@ jobs:
 
       - run: npm run test:e2e
 
+  # First-time database initialisation must be reliable. It has one shot: if an
+  # init script fails, the container restarts, sees a data directory and skips
+  # initialisation, leaving a half-configured database (this happened
+  # intermittently before roles.sql tolerated absent optional roles). A single
+  # run can't show a flake, so initialise a FRESH database several times and
+  # require every one to be clean: no init error, and no restart, since the
+  # failure "recovers" via a restart that a health check alone would not notice.
+  db-init:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build the database image
+        run: docker compose build db
+
+      - name: Initialise a fresh database 10 times
+        run: |
+          for i in $(seq 1 10); do
+            echo "=== fresh initialisation $i/10"
+            docker compose up -d --wait --wait-timeout 120 db
+            logs=$(docker compose logs db 2>&1)
+            restarts=$(docker inspect -f '{{.RestartCount}}' "$(docker compose ps -q db)")
+            if grep -qE "psql:.*ERROR|docker-entrypoint-initdb.d.*ERROR" <<<"$logs" || [ "$restarts" != "0" ]; then
+              echo "FAILED on run $i (restarts=$restarts)"
+              grep -nE "ERROR|FATAL" <<<"$logs" | head -20
+              exit 1
+            fi
+            docker compose down -v
+          done
+          echo "all 10 fresh initialisations were clean"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
   # The images are also published for arm64 (Raspberry Pi, ARM servers). CI
   # can't run arm64 containers natively, but BUILDING the image proves the parts
   # most likely to break: every upstream image still ships arm64 and the binary

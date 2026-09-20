@@ -63,6 +63,8 @@ export function CompactTaskItem({ task, timezone, urgency, onComplete, isRecomme
     >
       {/* Checkbox */}
       <button
+        type="button"
+        aria-label={`Mark "${task.title}" complete`}
         onClick={handleComplete}
         disabled={isCompleting}
         className={cn(

@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserTimezone } from "@/hooks/useUserTimezone";
-import { nowInTimezone } from "@/lib/dateUtils";
 
 export interface Task {
   id: string;
@@ -188,14 +186,16 @@ export function useUpdateTaskStatus() {
 
 export function useMarkTaskDone() {
   const { user } = useAuth();
-  const { timezone } = useUserTimezone();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (taskId: string) => {
       const { error } = await supabase
         .from("tasks")
-        .update({ status: "done", completed_at: nowInTimezone(timezone).toISOString() })
+        // completed_at is a timestamptz, so store the real instant. (nowInTimezone()
+        // returns a Date whose *local fields* are shifted to the profile timezone;
+        // serializing that skewed the stored time by the browser/profile offset.)
+        .update({ status: "done", completed_at: new Date().toISOString() })
         .eq("id", taskId);
       if (error) throw error;
     },

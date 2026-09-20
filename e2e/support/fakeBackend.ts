@@ -5,13 +5,18 @@ import type { BrowserContext, Route } from "@playwright/test";
 // instance-status function), installed at the network layer with
 // `context.route`, so the specs run with no server, database or Docker.
 //
+// It answers on the app's OWN origin (/auth/v1, /rest/v1, /functions/v1), just
+// like the real gateway, because the app calls the address it was loaded from
+// — there is no API URL to configure.
+//
 // It is deliberately dumb: GETs return the whole table (filters and ordering
 // are ignored — the app filters client-side wherever it matters), embedded
 // relations (`course`, `exam`, `quiz`) are joined in, and writes are applied
 // to the in-memory tables and recorded on `writes`. That is enough to drive
 // real user flows through the real UI and assert on what gets sent.
 
-export const API_URL = "http://localhost:54321";
+/** The origin the dev server (and so the app, and the fake) is served from. */
+export const APP_ORIGIN = "http://localhost:8080";
 export const USER_ID = "aaaaaaaa-0000-4000-8000-000000000001";
 export const COURSE_ID = "c0000000-0000-4000-8000-000000000001";
 
@@ -26,6 +31,7 @@ const TABLES = [
   "readings",
   "study_items",
   "notification_settings",
+  "widget_api_keys",
 ] as const;
 export type Table = (typeof TABLES)[number];
 
@@ -46,6 +52,8 @@ export interface FakeBackendOptions {
   signedIn?: boolean;
   courses?: Row[];
   tasks?: Row[];
+  /** Origin the app is loaded from (default: APP_ORIGIN). */
+  origin?: string;
 }
 
 export class FakeBackend {
@@ -170,7 +178,11 @@ const base64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toStrin
 /** Point the context's app at a fresh in-memory backend (and, by default, a stored session). */
 export async function installFakeBackend(context: BrowserContext, options: FakeBackendOptions = {}): Promise<FakeBackend> {
   const backend = new FakeBackend(options);
-  await context.route(`${API_URL}/**`, (route) => backend.handle(route));
+  const origin = options.origin ?? APP_ORIGIN;
+  // Only the backend's paths: the page itself and its assets come from the dev server.
+  for (const prefix of ["/auth/v1", "/rest/v1", "/functions/v1"]) {
+    await context.route(`${origin}${prefix}/**`, (route) => backend.handle(route));
+  }
 
   if (options.signedIn !== false) {
     const jwt = `${base64url({ alg: "HS256", typ: "JWT" })}.${base64url({ sub: USER_ID, role: "authenticated", exp: 4102444800 })}.sig`;
@@ -182,8 +194,9 @@ export async function installFakeBackend(context: BrowserContext, options: FakeB
       expires_at: Math.floor(Date.now() / 1000) + 86400,
       user: { id: USER_ID, email: "me@accounts.local", aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() },
     };
-    // supabase-js keys its stored session by the API host's first label.
-    await context.addInitScript(([key, value]) => localStorage.setItem(key, value), ["sb-localhost-auth-token", JSON.stringify(session)]);
+    // supabase-js keys its stored session by the API host's first label (localhost -> "localhost", 127.0.0.1 -> "127").
+    const storageKey = `sb-${new URL(origin).hostname.split(".")[0]}-auth-token`;
+    await context.addInitScript(([key, value]) => localStorage.setItem(key, value), [storageKey, JSON.stringify(session)]);
   }
   return backend;
 }

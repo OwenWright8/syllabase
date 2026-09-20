@@ -1,0 +1,22 @@
+# Keep the build context (everything `COPY . .` in the Dockerfile can see)
+# free of secrets and noise. In particular, a real .env must never enter the
+# build: Vite reads .env files at build time, and the context is sent to the
+# Docker daemon (or a remote builder) in full.
+.git
+.github
+.env
+.env.*
+node_modules
+dist
+dist-ssr
+test-results
+playwright-report
+blob-report
+e2e
+scripts
+docker-compose.yml
+README.md
+*.log
+.DS_Store
+.idea
+.vscode

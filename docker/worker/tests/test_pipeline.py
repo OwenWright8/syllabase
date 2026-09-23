@@ -10,7 +10,6 @@ from tools import Config, ProcessingError  # noqa: E402
 
 PDF = b"%PDF-1.7\n"
 PNG = b"\x89PNG\r\n\x1a\n"
-LIMITS = {"max_pages": 100}
 FAR_FUTURE = time.monotonic() + 10_000
 
 
@@ -50,9 +49,9 @@ class FakeTools:
         return self.image_text
 
 
-def run(tools, kind="syllabus", header=PDF, cfg=None, limits=LIMITS, deadline=FAR_FUTURE):
+def run(tools, kind="syllabus", header=PDF, cfg=None, deadline=FAR_FUTURE):
     progress = []
-    result = pipeline.extract(tools, "/x", kind, header, cfg or Config({}), limits, progress.append, deadline)
+    result = pipeline.extract(tools, "/x", kind, header, cfg or Config({}), progress.append, deadline)
     return result, progress
 
 
@@ -68,9 +67,14 @@ class TextLayer(unittest.TestCase):
         self.assertEqual([o for _, o in pages], [False, False, False])
         self.assertEqual(tools.ocr_calls, [])
 
+    def test_there_is_no_page_limit(self):
+        tools = FakeTools([REAL] * 5000)
+        (pages, _), _ = run(tools)
+        self.assertEqual(len(pages), 5000)
+
     def test_text_is_read_in_blocks_not_all_at_once(self):
         tools = FakeTools([REAL] * 120)
-        run(tools, limits={"max_pages": 500})
+        run(tools)
         self.assertEqual(tools.text_calls, [(1, 50), (51, 100), (101, 120)])
 
     def test_page_count_matches_the_pdf_even_if_the_tool_returns_fewer_pages(self):
@@ -129,9 +133,6 @@ class Refusals(unittest.TestCase):
 
     def test_a_password_protected_pdf(self):
         self.assertRefused(lambda: run(FakeTools([REAL], password=True)), "password")
-
-    def test_too_many_pages(self):
-        self.assertRefused(lambda: run(FakeTools([REAL] * 11), limits={"max_pages": 10}), "limit is 10")
 
     def test_a_file_that_is_not_a_document(self):
         self.assertRefused(lambda: run(FakeTools([REAL]), header=b"MZ\x90\x00 an executable"), "doesn't look like")

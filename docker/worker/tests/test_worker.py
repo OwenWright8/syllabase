@@ -120,7 +120,7 @@ def run_process(chunks, size, tools=None, kind="syllabus"):
     connection = FakeConnection(chunks)
     cfg = Config({"WORKER_TMPDIR": tempfile.gettempdir()})
     document = make_document(size, kind)
-    worker.process(connection, tools or FakeTools([REAL, REAL]), cfg, {"enabled": True, "max_pages": 100}, document)
+    worker.process(connection, tools or FakeTools([REAL, REAL]), cfg, document)
     return connection
 
 
@@ -204,7 +204,7 @@ class Failures(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         connection = FakeConnection(chunks)
         cfg = Config({"WORKER_TMPDIR": tmp})
-        worker.process(connection, FakeTools([REAL], fail_with=ProcessingError("no")), cfg, {"enabled": True, "max_pages": 10}, make_document(size))
+        worker.process(connection, FakeTools([REAL], fail_with=ProcessingError("no")), cfg, make_document(size))
         self.assertEqual(os.listdir(tmp), [])
 
 

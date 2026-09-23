@@ -205,7 +205,6 @@ export type Database = {
           enabled: boolean
           max_documents: number
           max_file_bytes: number
-          max_pages: number
           max_user_bytes: number
           singleton: boolean
         }
@@ -213,7 +212,6 @@ export type Database = {
           enabled?: boolean
           max_documents?: number
           max_file_bytes?: number
-          max_pages?: number
           max_user_bytes?: number
           singleton?: boolean
         }
@@ -221,7 +219,6 @@ export type Database = {
           enabled?: boolean
           max_documents?: number
           max_file_bytes?: number
-          max_pages?: number
           max_user_bytes?: number
           singleton?: boolean
         }

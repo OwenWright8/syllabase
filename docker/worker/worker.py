@@ -57,10 +57,10 @@ def connect(url):
 
 def read_limits(connection):
     with connection.cursor() as cursor:
-        cursor.execute("SELECT enabled, max_pages, max_file_bytes FROM public.document_limits")
-        enabled, max_pages, max_file_bytes = cursor.fetchone()
+        cursor.execute("SELECT enabled, max_file_bytes FROM public.document_limits")
+        enabled, max_file_bytes = cursor.fetchone()
     connection.commit()
-    return {"enabled": enabled, "max_pages": max_pages, "max_file_bytes": max_file_bytes}
+    return {"enabled": enabled, "max_file_bytes": max_file_bytes}
 
 
 def requeue_interrupted(connection, jobs):
@@ -180,7 +180,7 @@ def fail(connection, document_id, message):
     connection.commit()
 
 
-def process(connection, tools, cfg, limits, document):
+def process(connection, tools, cfg, document):
     started = time.monotonic()
     workdir = tempfile.mkdtemp(dir=cfg.tmpdir, prefix="doc-")
     try:
@@ -199,7 +199,7 @@ def process(connection, tools, cfg, limits, document):
                 last.update(percent=percent, at=now)
 
         deadline = started + cfg.max_seconds
-        pages, actual = pipeline.extract(tools, path, document["kind"], header, cfg, limits, report, deadline)
+        pages, actual = pipeline.extract(tools, path, document["kind"], header, cfg, report, deadline)
 
         found, offset = [], None
         if document["kind"] == "textbook" and actual == "pdf":
@@ -357,7 +357,7 @@ def main():
                 continue
 
             log.info("processing %s (%s, %s)", document["id"], document["kind"], docproc.friendly_error(document["filename"])[:60])
-            process(connection, tools, cfg, limits, document)
+            process(connection, tools, cfg, document)
         except psycopg2.Error as error:
             log.warning("database error, will reconnect: %s", str(error).strip().splitlines()[0] if str(error).strip() else error)
             try:

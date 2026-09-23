@@ -259,7 +259,7 @@ jobs:
       - name: The worker's database role can only touch the document tables
         run: |
           run_sql() {
-            docker compose exec -T db sh -c 'PGPASSWORD="$(cat /secrets/postgres_password)" psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=0 -Atc "$1"' _ "$1" 2>&1
+            docker compose exec -T db sh -c 'PGPASSWORD="$(cat /secrets/postgres_password)" psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=0 -Atc "$1"' _ "$1" 2>&1 || true   # psql exits 1 on a denied query; the checks read the text
           }
           denied() { out=$(run_sql "SET ROLE syllabase_worker; $1"); echo "  $1"; echo "    -> $out" | head -2; grep -qi "permission denied" <<<"$out"; }
           allowed() { out=$(run_sql "SET ROLE syllabase_worker; $1"); echo "  $1 -> ok"; ! grep -qi "permission denied\|does not exist" <<<"$out"; }

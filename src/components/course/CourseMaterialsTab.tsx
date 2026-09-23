@@ -27,6 +27,7 @@ import {
   useRetryDocument,
   useUploadDocument,
 } from "@/hooks/useCourseDocuments";
+import { TextbookChapters } from "./TextbookChapters";
 
 interface CourseMaterialsTabProps {
   courseId: string;
@@ -277,6 +278,7 @@ function DocumentRow({ doc, onDelete, onRetry }: { doc: CourseDocument; onDelete
         </div>
       </div>
       <DocumentStatus doc={doc} />
+      {doc.kind === "textbook" && doc.status === "ready" && !!doc.page_count && <TextbookChapters doc={doc} />}
     </div>
   );
 }

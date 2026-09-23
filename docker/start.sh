@@ -221,7 +221,7 @@ SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
   /usr/local/bin/edge-runtime start --main-service /app/functions/main &
 EDGE_PID=$!
 
-WORKER_SUPERVISOR_PID=""
+WORKER_SUPERVISOR_PIDS=""
 if [ "$DOC_ENABLED" = true ]; then
   echo "[start] starting document worker..."
   # Runs as its own unprivileged user with no way to gain privileges, no
@@ -231,25 +231,29 @@ if [ "$DOC_ENABLED" = true ]; then
   WORKER_UID=$(id -u syllabase-worker)
   WORKER_GID=$(id -g syllabase-worker)
   WORKER_DATABASE_URL="postgres://syllabase_worker:${WORKER_DB_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
-  (
-    while :; do
-      env -u POSTGRES_PASSWORD -u JWT_SECRET -u SERVICE_ROLE_KEY -u ANON_KEY -u CRON_SECRET \
-        WORKER_DATABASE_URL="$WORKER_DATABASE_URL" \
-        WORKER_TMPDIR=/var/lib/syllabase-worker/tmp \
-        HOME=/var/lib/syllabase-worker \
-        setpriv --reuid="$WORKER_UID" --regid="$WORKER_GID" --clear-groups --no-new-privs \
-        python3 /app/worker/worker.py || echo "[start] document worker exited; restarting in 5s" >&2
-      sleep 5
-    done
-  ) &
-  WORKER_SUPERVISOR_PID=$!
+  # Two workers, one per kind of job, so a chapter download is never stuck
+  # behind a long OCR.
+  for JOBS in documents extracts; do
+    (
+      while :; do
+        env -u POSTGRES_PASSWORD -u JWT_SECRET -u SERVICE_ROLE_KEY -u ANON_KEY -u CRON_SECRET \
+          WORKER_DATABASE_URL="$WORKER_DATABASE_URL" \
+          WORKER_TMPDIR=/var/lib/syllabase-worker/tmp \
+          HOME=/var/lib/syllabase-worker \
+          setpriv --reuid="$WORKER_UID" --regid="$WORKER_GID" --clear-groups --no-new-privs \
+          python3 /app/worker/worker.py "$JOBS" || echo "[start] $JOBS worker exited; restarting in 5s" >&2
+        sleep 5
+      done
+    ) &
+    WORKER_SUPERVISOR_PIDS="$WORKER_SUPERVISOR_PIDS $!"
+  done
 else
   echo "[start] document uploads are switched off (DOCUMENTS=off): not starting the worker"
 fi
 
 cleanup() {
   echo "[start] shutting down..."
-  kill "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" ${WORKER_SUPERVISOR_PID:+"$WORKER_SUPERVISOR_PID"} 2>/dev/null || true
+  kill "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" $WORKER_SUPERVISOR_PIDS 2>/dev/null || true
   wait "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" 2>/dev/null || true
 }
 trap cleanup TERM INT

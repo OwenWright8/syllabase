@@ -140,6 +140,7 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 ### 📎 Course materials
 - Upload each class's textbooks (PDF) and syllabus (PDF, Word or a photo) on the course's **Materials** tab. Scans and photos are read with OCR on your own server.
 - A textbook's chapters are found from its bookmarks or its printed contents page (you can correct, add or remove them), and each chapter downloads as its own small PDF, so you can grab "chapter 5" instead of the whole book. Any page range can be downloaded too.
+- **Find readings** on an uploaded syllabus looks for what's due when ("Read Chapter 5 by 10/18", a table of weeks, dated headings) and asks you to confirm it before anything is added. Confirmed readings appear in your readings list, each with a **Download Ch. 5 (pp. 101–130)** button when the chapter is in one of your textbooks. This is rule-based, not AI, so always glance over the review: unusual layouts may be missed.
 - Files are stored in your database and processed by a sandboxed background worker; per-user limits apply (see `DOCUMENT_*` settings).
 
 ### 🧪 Exams, Quizzes & Study Items

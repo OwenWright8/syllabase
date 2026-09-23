@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AlertTriangle, BookOpen, CheckCircle2, FileText, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, BookOpen, CheckCircle2, FileText, ListChecks, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +28,7 @@ import {
   useUploadDocument,
 } from "@/hooks/useCourseDocuments";
 import { TextbookChapters } from "./TextbookChapters";
+import { SyllabusReadingsDialog } from "./SyllabusReadingsDialog";
 
 interface CourseMaterialsTabProps {
   courseId: string;
@@ -258,6 +259,7 @@ function MaterialsSection({ kind, documents, inFlight, canUpload, onChoose, onDe
 }
 
 function DocumentRow({ doc, onDelete, onRetry }: { doc: CourseDocument; onDelete: (doc: CourseDocument) => void; onRetry: (doc: CourseDocument) => void }) {
+  const [findingReadings, setFindingReadings] = useState(false);
   return (
     <div className="rounded-xl border border-border p-3">
       <div className="flex items-start justify-between gap-2">
@@ -266,6 +268,12 @@ function DocumentRow({ doc, onDelete, onRetry }: { doc: CourseDocument; onDelete
           <p className="text-xs text-muted-foreground mt-0.5">{formatBytes(doc.size_bytes)}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {doc.kind === "syllabus" && doc.status === "ready" && (
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => setFindingReadings(true)}>
+              <ListChecks className="h-3.5 w-3.5" />
+              Find readings
+            </Button>
+          )}
           {doc.status === "failed" && (
             <Button size="sm" variant="outline" className="gap-1" onClick={() => onRetry(doc)}>
               <RotateCcw className="h-3.5 w-3.5" />
@@ -279,6 +287,7 @@ function DocumentRow({ doc, onDelete, onRetry }: { doc: CourseDocument; onDelete
       </div>
       <DocumentStatus doc={doc} />
       {doc.kind === "textbook" && doc.status === "ready" && !!doc.page_count && <TextbookChapters doc={doc} />}
+      {findingReadings && <SyllabusReadingsDialog doc={doc} onClose={() => setFindingReadings(false)} />}
     </div>
   );
 }

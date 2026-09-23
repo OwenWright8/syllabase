@@ -117,7 +117,10 @@ export function useDeleteDocument() {
       if (error) throw error;
     },
     onSuccess: () => {
-      if (user) queryClient.invalidateQueries({ queryKey: documentKeys.all(user.id) });
+      if (!user) return;
+      queryClient.invalidateQueries({ queryKey: documentKeys.all(user.id) });
+      // readings that pointed at it lose their download link (the database clears it)
+      queryClient.invalidateQueries({ queryKey: ["readings", user.id] });
     },
   });
 }

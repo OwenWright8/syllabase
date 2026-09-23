@@ -494,6 +494,46 @@ def main():
     status, body = a.rest("DELETE", f"/document_chapters?id=eq.{mine[0]['id']}")
     check("a user can delete a chapter", status in (200, 204) and not any(c["number"] == 9 for c in a.chapters(outline_book)), (status, body))
 
+    print("== readings that point at a textbook")
+    def reading(**extra):
+        body = {"user_id": a.user_id, "course_id": course, "title": "Chapter 2: Middles", "pages": "Ch. 2", "due_date": "2026-10-18"}
+        body.update(extra)
+        return a.rest("POST", "/readings", body=body, prefer="return=representation")
+
+    status, made = reading(document_id=outline_book, start_page=6, end_page=8)
+    check("a reading can link to the user's own textbook and its pages", status == 201 and made[0]["document_id"] == outline_book and made[0]["start_page"] == 6, (status, made))
+    linked_reading = made[0]["id"] if status == 201 else None
+    status, rows = a.rest("GET", "/readings?select=title,document_id,start_page,end_page,document:course_documents(id,filename)&document_id=not.is.null")
+    check("the reading list can include the textbook's file name (for the download's name)", status == 200 and rows and rows[0]["document"]["filename"] == "bookmarked.pdf", (status, rows))
+    status, body = reading()
+    check("a reading with no textbook is unchanged", status == 201, (status, body))
+    if status == 201:
+        a.rest("DELETE", f"/readings?id=eq.{body[0]['id']}")
+
+    b_course = b.make_course("B early course")
+    status, b_doc = b.start(b_course, "textbook", "b-book.pdf", 100)
+    check("(user B has a document of their own)", status == 201, (status, b_doc))
+    status, body = reading(document_id=b_doc["id"], start_page=1, end_page=2)
+    check("a reading can't link to someone else's document", status in (400, 403), (status, body))
+    status, body = reading(document_id="00000000-0000-4000-8000-00000000dead", start_page=1, end_page=2)
+    check("...nor to one that doesn't exist", status in (400, 403, 409), (status, body))
+    status, body = a.rest("PATCH", f"/readings?id=eq.{linked_reading}", body={"document_id": b_doc["id"]})
+    check("an existing reading can't be re-pointed at someone else's document", status in (400, 403), (status, body))
+    status, body = reading(document_id=outline_book, start_page=5)
+    check("a start page without an end page is refused", status in (400, 403), (status, body))
+    status, body = reading(document_id=outline_book, start_page=9, end_page=3)
+    check("a backwards page range is refused", status in (400, 403), (status, body))
+
+    status, throwaway = a.start(course, "textbook", "link-target.pdf", 10)
+    status, made = reading(document_id=throwaway["id"], start_page=1, end_page=3, title="Outlives its book")
+    a.rest("DELETE", f"/course_documents?id=eq.{throwaway['id']}")
+    status, rows = a.rest("GET", f"/readings?id=eq.{made[0]['id']}&select=title,document_id,start_page,end_page")
+    check("deleting the textbook keeps the reading and only clears the link", status == 200 and rows and rows[0]["document_id"] is None and rows[0]["title"] == "Outlives its book", (status, rows))
+    status, rows = b.rest("GET", "/readings?select=id")
+    check("user B sees none of A's readings", status == 200 and rows == [], (status, rows))
+    a.rest("DELETE", f"/readings?id=eq.{made[0]['id']}")
+    a.rest("DELETE", f"/readings?id=eq.{linked_reading}")
+
     print("== the number of documents per user is bounded too")
     tiny = []
     refused = None

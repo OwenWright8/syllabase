@@ -4,7 +4,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Archive, ArchiveRestore, CheckSquare, FileText, BarChart3, Plus, Calendar } from "lucide-react";
+import { ArrowLeft, Archive, ArchiveRestore, CheckSquare, FileText, BarChart3, Plus, Calendar, Library } from "lucide-react";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { TaskCard } from "@/components/TaskCard";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { ReadingsList } from "@/components/readings/ReadingsList";
 import { CreateReadingDialog } from "@/components/readings/CreateReadingDialog";
 import { CourseExamsTab } from "@/components/course/CourseExamsTab";
 import { CourseStatsTab } from "@/components/course/CourseStatsTab";
+import { CourseMaterialsTab } from "@/components/course/CourseMaterialsTab";
 import { formatTimeOfDay } from "@/lib/dateUtils";
 
 export default function CourseDetail() {
@@ -130,7 +131,7 @@ export default function CourseDetail() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 h-auto">
+          <TabsList className="grid w-full grid-cols-5 h-auto">
             <TabsTrigger value="assignments" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-1 sm:px-3">
               <CheckSquare className="h-4 w-4" />
               <span className="text-xs sm:text-sm">Assignments</span>
@@ -152,6 +153,10 @@ export default function CourseDetail() {
             <TabsTrigger value="exams" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-1 sm:px-3">
               <Calendar className="h-4 w-4" />
               <span className="text-xs sm:text-sm">Exams</span>
+            </TabsTrigger>
+            <TabsTrigger value="materials" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-1 sm:px-3">
+              <Library className="h-4 w-4" />
+              <span className="text-xs sm:text-sm">Materials</span>
             </TabsTrigger>
             <TabsTrigger value="stats" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-1 sm:px-3">
               <BarChart3 className="h-4 w-4" />
@@ -225,6 +230,11 @@ export default function CourseDetail() {
           {/* Exams Tab */}
           <TabsContent value="exams">
             <CourseExamsTab courseId={id!} courseName={course.name} timezone={timezone} />
+          </TabsContent>
+
+          {/* Materials Tab */}
+          <TabsContent value="materials">
+            <CourseMaterialsTab courseId={id!} />
           </TabsContent>
 
           {/* Stats Tab */}

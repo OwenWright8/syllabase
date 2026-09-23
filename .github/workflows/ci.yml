@@ -219,6 +219,87 @@ jobs:
           curl -fsS "$api/courses?id=eq.${id}&select=class_time" "${auth[@]}" | grep -q '"class_time":null'
           curl -fsS -X DELETE "$api/courses?id=eq.${id}" "${auth[@]}"
 
+      # Course materials, for real: uploads go through the actual REST API in 1 MiB
+      # chunks, the actual worker reads them with the actual poppler/qpdf/tesseract,
+      # and the actual database enforces who may do what. Covers a text PDF, an
+      # image-only PDF, a photo and a Word file (OCR and extraction), an encrypted
+      # PDF and garbage (refused with a message), the limits and column privileges,
+      # and that a second user can see none of it. See scripts/ci-documents.py.
+      - name: Install the libraries that generate the test files
+        run: |
+          python3 -m venv /tmp/fixtures-venv
+          /tmp/fixtures-venv/bin/pip install --quiet reportlab pillow
+
+      - name: Course documents work end to end (upload, OCR, rules, isolation)
+        run: |
+          API_URL=http://localhost:8080 ANON_KEY="${CI_ANON_KEY}" ACCESS_TOKEN="${CI_ACCESS_TOKEN}" \
+            /tmp/fixtures-venv/bin/python scripts/ci-documents.py
+
+      # The worker parses untrusted files, so its sandbox is checked, not assumed.
+      - name: The document worker is sandboxed
+        run: |
+          docker compose exec -T app sh -c '
+            pid=""
+            for p in /proc/[0-9]*; do
+              if tr "\0" " " < "$p/cmdline" 2>/dev/null | grep -q "python3 /app/worker/worker[.]py"; then pid=${p#/proc/}; fi
+            done
+            [ -n "$pid" ] || { echo "the worker is not running"; exit 1; }
+            echo "worker pid $pid runs as: $(stat -c %U /proc/$pid)"
+            [ "$(stat -c %U /proc/$pid)" = "syllabase-worker" ] || { echo "worker is not the unprivileged user"; exit 1; }
+            grep -q "^NoNewPrivs:[[:space:]]*1" /proc/$pid/status || { echo "no_new_privs is not set"; exit 1; }
+            if tr "\0" "\n" < /proc/$pid/environ | grep -E "^(POSTGRES_PASSWORD|JWT_SECRET|SERVICE_ROLE_KEY|ANON_KEY|CRON_SECRET)="; then
+              echo "a secret is in the worker environment"; exit 1
+            fi
+            uid=$(id -u syllabase-worker); gid=$(id -g syllabase-worker)
+            if setpriv --reuid=$uid --regid=$gid --clear-groups cat /secrets/jwt_secret >/dev/null 2>&1; then echo "the worker can read /secrets"; exit 1; fi
+            if setpriv --reuid=$uid --regid=$gid --clear-groups sh -c "echo x > /app/worker/pwned" 2>/dev/null; then echo "the worker can modify its own code"; exit 1; fi
+            echo "sandbox ok: unprivileged, no_new_privs, no secrets in its environment, cannot read /secrets or edit /app"
+          '
+
+      - name: The worker's database role can only touch the document tables
+        run: |
+          run_sql() {
+            docker compose exec -T db sh -c 'PGPASSWORD="$(cat /secrets/postgres_password)" psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=0 -Atc "$1"' _ "$1" 2>&1
+          }
+          denied() { out=$(run_sql "SET ROLE syllabase_worker; $1"); echo "  $1"; echo "    -> $out" | head -2; grep -qi "permission denied" <<<"$out"; }
+          allowed() { out=$(run_sql "SET ROLE syllabase_worker; $1"); echo "  $1 -> ok"; ! grep -qi "permission denied\|does not exist" <<<"$out"; }
+          allowed "SELECT count(*) FROM public.course_documents"
+          allowed "SELECT count(*) FROM public.course_document_chunks"
+          allowed "SELECT count(*) FROM public.document_limits"
+          denied  "SELECT count(*) FROM public.tasks"
+          denied  "SELECT count(*) FROM public.profiles"
+          denied  "SELECT count(*) FROM auth.users"
+          denied  "UPDATE public.course_documents SET size_bytes = 1 WHERE false"
+          denied  "UPDATE public.course_documents SET user_id = user_id WHERE false"
+          denied  "INSERT INTO public.course_documents (user_id) SELECT null WHERE false"
+
+      # The kill switch: DOCUMENTS=off must stop the worker and refuse uploads at
+      # the database, not just hide a button. Then put the default back.
+      - name: DOCUMENTS=off stops the worker and refuses uploads
+        run: |
+          DOCUMENTS=off docker compose up -d app
+          ./scripts/wait-for-stack.sh
+          docker compose logs app 2>&1 | grep -q "not starting the worker"
+          if docker compose exec -T app sh -c 'for p in /proc/[0-9]*; do tr "\0" " " < "$p/cmdline" 2>/dev/null | grep -q "worker[.]py" && exit 0; done; exit 1'; then
+            echo "the worker is still running"; exit 1
+          fi
+          enabled=$(curl -fsS "http://localhost:8080/rest/v1/document_limits?select=enabled" -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}")
+          echo "limits: $enabled"
+          echo "$enabled" | grep -q '"enabled":false'
+          uid=$(python3 -c "import json;print(json.load(open('login.json'))['user']['id'])")
+          course=$(curl -fsS -X POST http://localhost:8080/rest/v1/courses -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}" -H "Content-Type: application/json" -H "Prefer: return=representation" \
+            -d "{\"user_id\":\"${uid}\",\"name\":\"Off\",\"short_code\":\"OFF\",\"color\":\"#000000\"}" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/rest/v1/course_documents -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}" -H "Content-Type: application/json" \
+            -d "{\"user_id\":\"${uid}\",\"course_id\":\"${course}\",\"kind\":\"syllabus\",\"filename\":\"x.pdf\",\"size_bytes\":1000}")
+          echo "upload while off -> HTTP $code"
+          [ "$code" = "403" ] || [ "$code" = "401" ]
+          curl -fsS -X DELETE "http://localhost:8080/rest/v1/courses?id=eq.${course}" -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}"
+          # back to the default (on)
+          docker compose up -d app
+          ./scripts/wait-for-stack.sh
+          enabled=$(curl -fsS "http://localhost:8080/rest/v1/document_limits?select=enabled" -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}")
+          echo "$enabled" | grep -q '"enabled":true'
+
       # Chrome/Edge send `Accept-Encoding: gzip, deflate, br, zstd`. With that
       # header the edge runtime accepted the request, ran the function, and
       # never delivered the response. nginx strips it on /functions/v1/ — keep

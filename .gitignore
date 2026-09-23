@@ -36,3 +36,7 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Python bytecode (the document worker)
+__pycache__/
+*.pyc

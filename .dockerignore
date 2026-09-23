@@ -20,3 +20,7 @@ README.md
 .DS_Store
 .idea
 .vscode
+# Unit tests and caches for the worker/scripts aren't needed at run time
+docker/worker/tests
+docker/tests
+**/__pycache__

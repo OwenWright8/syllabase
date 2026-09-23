@@ -4,3 +4,4 @@ export { plainPagesText, resolveInBook, resolveInBooks } from "./resolve";
 export type { Book, BookChapter, Resolution } from "./resolve";
 export type { ReadingReference } from "./references";
 export type { DateContext } from "./dates";
+export { matchReadingText } from "./match";

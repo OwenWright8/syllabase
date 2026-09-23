@@ -311,16 +311,16 @@ jobs:
       # defaults.
       - name: DOCUMENT_*=unlimited lifts the limits
         run: |
-          DOCUMENT_MAX_FILE_MB=unlimited DOCUMENT_USER_QUOTA_MB=unlimited DOCUMENT_MAX_PAGES=unlimited DOCUMENT_MAX_COUNT=unlimited docker compose up -d app
+          DOCUMENT_MAX_FILE_MB=unlimited DOCUMENT_USER_QUOTA_MB=unlimited DOCUMENT_MAX_COUNT=unlimited docker compose up -d app
           ./scripts/wait-for-stack.sh
           auth=(-H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}")
-          limits=$(curl -fsS "http://localhost:8080/rest/v1/document_limits?select=max_file_bytes,max_user_bytes,max_pages,max_documents" "${auth[@]}")
+          limits=$(curl -fsS "http://localhost:8080/rest/v1/document_limits?select=max_file_bytes,max_user_bytes,max_documents" "${auth[@]}")
           echo "limits: $limits"
           echo "$limits" | python3 -c "
           import json,sys
           row=json.load(sys.stdin)[0]
           assert row['max_file_bytes']==row['max_user_bytes']==10**15, row
-          assert row['max_pages']==10**6 and row['max_documents']==10**6, row
+          assert row['max_documents']==10**6, row
           "
           uid=$(python3 -c "import json;print(json.load(open('login.json'))['user']['id'])")
           course=$(curl -fsS -X POST http://localhost:8080/rest/v1/courses "${auth[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" \

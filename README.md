@@ -58,7 +58,6 @@ services:
       DOCUMENTS: ${DOCUMENTS:-on}
       DOCUMENT_MAX_FILE_MB: ${DOCUMENT_MAX_FILE_MB:-}
       DOCUMENT_USER_QUOTA_MB: ${DOCUMENT_USER_QUOTA_MB:-}
-      DOCUMENT_MAX_PAGES: ${DOCUMENT_MAX_PAGES:-}
       DOCUMENT_MAX_COUNT: ${DOCUMENT_MAX_COUNT:-}
     volumes:
       - secrets:/secrets
@@ -97,7 +96,7 @@ None of these are required. Docker Compose reads a `.env` file next to `docker-c
 | `POSTGRES_PASSWORD`, `JWT_SECRET`, `CRON_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY` | Use your own secrets instead of generated ones. |
 | `APP_PORT` | The port the app is published on (default `8080`). |
 | `DOCUMENTS` | `off` disables uploading textbooks/syllabi and doesn't start the OCR worker (default `on`). |
-| `DOCUMENT_MAX_FILE_MB`, `DOCUMENT_USER_QUOTA_MB`, `DOCUMENT_MAX_PAGES`, `DOCUMENT_MAX_COUNT` | Largest single upload (default 200 MB), total per user (default 1024 MB), most pages in a PDF (default 1500) and most documents per user (default 200). Sign-up is open, so these bound what any one account can store. Each also accepts `unlimited`, sensible on a private instance where you trust everyone with an account. These are only read if your compose file passes them to the `app` service, as the one above does. |
+| `DOCUMENT_MAX_FILE_MB`, `DOCUMENT_USER_QUOTA_MB`, `DOCUMENT_MAX_COUNT` | Largest single upload (default 200 MB), total per user (default 1024 MB) and most documents per user (default 200). There is no limit on a PDF's page count. Sign-up is open, so these bound what any one account can store. Each also accepts `unlimited`, sensible on a private instance where you trust everyone with an account. These are only read if your compose file passes them to the `app` service, as the one above does. |
 | `SYLLABASE_VERSION` | Pin to a release tag (e.g. `v0.4.0`) instead of `latest`. |
 
 ### Upgrading
@@ -141,7 +140,7 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 ### 📎 Course materials
 - Upload each class's textbooks (PDF) and syllabus (PDF, Word or a photo) on the course's **Materials** tab. Scans and photos are read with OCR on your own server.
 - A textbook's chapters are found from its bookmarks or its printed contents page (you can correct, add or remove them), and each chapter downloads as its own small PDF, so you can grab "chapter 5" instead of the whole book. Any page range can be downloaded too.
-- **Find readings** on an uploaded syllabus looks for what's due when ("Read Chapter 5 by 10/18", a table of weeks, dated headings) and asks you to confirm it before anything is added. Confirmed readings appear in your readings list, each with a **Download Ch. 5 (pp. 101–130)** button when the chapter is in one of your textbooks. This is rule-based, not AI, so always glance over the review: unusual layouts may be missed.
+- **Find readings** on an uploaded syllabus looks for what's due when ("Read Chapter 5 by 10/18", a table of weeks, dated headings) and asks you to confirm it before anything is added. Confirmed readings appear in your readings list, each with a **Download Ch. 5 (pp. 101–130)** button when the chapter is in one of your textbooks. Readings you type in yourself get the button too, as long as they name the chapter or pages ("Read Chapter 5") and that course's textbook has been read. Readings that were due in the past are added as done. This is rule-based, not AI, so always glance over the review: unusual layouts may be missed.
 - Files are stored in your database and processed by a sandboxed background worker; per-user limits apply (see `DOCUMENT_*` settings).
 
 ### 🧪 Exams, Quizzes & Study Items

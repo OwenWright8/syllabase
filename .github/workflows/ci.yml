@@ -228,7 +228,7 @@ jobs:
       - name: Install the libraries that generate the test files
         run: |
           python3 -m venv /tmp/fixtures-venv
-          /tmp/fixtures-venv/bin/pip install --quiet reportlab pillow
+          /tmp/fixtures-venv/bin/pip install --quiet reportlab pillow pypdf
 
       - name: Course documents work end to end (upload, OCR, rules, isolation)
         run: |
@@ -266,12 +266,18 @@ jobs:
           allowed "SELECT count(*) FROM public.course_documents"
           allowed "SELECT count(*) FROM public.course_document_chunks"
           allowed "SELECT count(*) FROM public.document_limits"
+          allowed "SELECT count(*) FROM public.document_chapters"
+          allowed "SELECT count(*) FROM public.document_extracts"
           denied  "SELECT count(*) FROM public.tasks"
           denied  "SELECT count(*) FROM public.profiles"
           denied  "SELECT count(*) FROM auth.users"
           denied  "UPDATE public.course_documents SET size_bytes = 1 WHERE false"
           denied  "UPDATE public.course_documents SET user_id = user_id WHERE false"
           denied  "INSERT INTO public.course_documents (user_id) SELECT null WHERE false"
+          denied  "UPDATE public.document_extracts SET user_id = user_id WHERE false"
+          denied  "UPDATE public.document_extracts SET start_page = 1 WHERE false"
+          denied  "INSERT INTO public.document_extracts (user_id) SELECT null WHERE false"
+          denied  "UPDATE public.document_chapters SET title = 'x' WHERE false"
 
       # The kill switch: DOCUMENTS=off must stop the worker and refuse uploads at
       # the database, not just hide a button. Then put the default back.

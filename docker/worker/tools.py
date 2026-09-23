@@ -5,6 +5,7 @@ tesseract), so every call here has a timeout, a memory ceiling and a file-size
 ceiling, gets no stdin and a minimal environment, and reports failures in words
 a user can act on rather than as a stack trace.
 """
+import json
 import os
 import resource
 import shutil
@@ -89,6 +90,45 @@ class Tools:
         # 3 = encrypted but opens without one (common for "no printing" textbooks).
         done = self._run(["qpdf", "--requires-password", path], 60, "Checking the PDF", ok_codes=(0, 2, 3))
         return done.returncode == 0
+
+    def outline(self, path):
+        """The PDF's bookmarks as [{'title', 'page', 'kids': [...]}], [] if it has none."""
+        # qpdf exits 3 for a file it had to repair, which still yields usable output.
+        done = self._run(["qpdf", "--json=2", "--json-key=outlines", path], 120, "Reading the PDF's bookmarks", ok_codes=(0, 3))
+        try:
+            data = json.loads(done.stdout.decode("utf-8", errors="replace"))
+        except ValueError:
+            return []
+        budget = [5000]  # a hostile file shouldn't be able to make this walk forever
+
+        def walk(nodes, depth):
+            found = []
+            if not isinstance(nodes, list) or depth > 6:
+                return found
+            for node in nodes:
+                if not isinstance(node, dict) or budget[0] <= 0:
+                    break
+                budget[0] -= 1
+                page = node.get("destpageposfrom1")
+                found.append(
+                    {
+                        "title": str(node.get("title") or "")[:300],
+                        "page": page if isinstance(page, int) and not isinstance(page, bool) else None,
+                        "kids": walk(node.get("kids"), depth + 1),
+                    }
+                )
+            return found
+
+        return walk(data.get("outlines") if isinstance(data, dict) else None, 0)
+
+    def extract_pages(self, path, first, last, destination):
+        """Copy pages first..last of `path` into a new PDF (no re-encoding, so it's fast and lossless)."""
+        self._run(
+            ["qpdf", "--empty", "--pages", path, f"{first}-{last}", "--", destination],
+            600,
+            "Cutting out those pages",
+            ok_codes=(0, 3),
+        )
 
     def text(self, path, first, last):
         done = self._run(

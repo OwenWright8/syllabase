@@ -125,6 +125,81 @@ export type Database = {
         }
         Relationships: []
       }
+      document_chapters: {
+        Row: {
+          created_at: string
+          document_id: string
+          end_page: number
+          id: string
+          number: number | null
+          source: string
+          start_page: number
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          end_page: number
+          id?: string
+          number?: number | null
+          source?: string
+          start_page: number
+          title?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          end_page?: number
+          id?: string
+          number?: number | null
+          source?: string
+          start_page?: number
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      document_extracts: {
+        Row: {
+          created_at: string
+          data: string | null
+          document_id: string
+          end_page: number
+          error: string | null
+          id: string
+          size_bytes: number | null
+          start_page: number
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: string | null
+          document_id: string
+          end_page: number
+          error?: string | null
+          id?: string
+          size_bytes?: number | null
+          start_page: number
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: string | null
+          document_id?: string
+          end_page?: number
+          error?: string | null
+          id?: string
+          size_bytes?: number | null
+          start_page?: number
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       document_limits: {
         Row: {
           enabled: boolean
@@ -613,7 +688,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      extract_piece: {
+        Args: { p_extract: string; p_piece: number }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

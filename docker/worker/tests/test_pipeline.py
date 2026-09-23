@@ -17,7 +17,9 @@ FAR_FUTURE = time.monotonic() + 10_000
 class FakeTools:
     """Stands in for the real tools: page_texts[i] is the text layer of page i+1."""
 
-    def __init__(self, page_texts, ocr=None, password=False, image_text="A readable line of text"):
+    def __init__(self, page_texts, ocr=None, password=False, image_text="A readable line of text", outline=None, outline_error=None):
+        self.bookmarks = outline or []
+        self.outline_error = outline_error
         self.page_texts = page_texts
         self.ocr = ocr or {}
         self.password = password
@@ -27,6 +29,11 @@ class FakeTools:
 
     def needs_password(self, path):
         return self.password
+
+    def outline(self, path):
+        if self.outline_error:
+            raise self.outline_error
+        return self.bookmarks
 
     def page_count(self, path):
         return len(self.page_texts)
@@ -159,3 +166,89 @@ class Images(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+CONTENTS_PAGE = """Contents
+Chapter 1   Beginnings ........ 1
+Chapter 2   Middles ........... 21
+Chapter 3   Endings ........... 47
+Index ......................... 90
+"""
+
+
+def textbook_pages(offset=6, total=110, scanned_body=False):
+    """Front matter, a contents page (PDF page 3), then chapters starting at printed page + offset."""
+    pages = [REAL] * total
+    pages[2] = CONTENTS_PAGE
+    for number, title, printed in [(1, "Beginnings", 1), (2, "Middles", 21), (3, "Endings", 47)]:
+        pages[printed + offset - 1] = f"Chapter {number}\n{title}\n\n" + REAL
+    if scanned_body:
+        pages = [text if number <= 3 else "" for number, text in enumerate(pages, start=1)]
+        return pages
+    return pages
+
+
+def detect(tools, pages, cfg=None, deadline=FAR_FUTURE):
+    return pipeline.detect_chapters(tools, "/x", [(text, False) for text in pages], cfg or Config({}), deadline)
+
+
+class Chapters(unittest.TestCase):
+    def test_bookmarks_are_used_when_the_book_has_them(self):
+        tree = [{"title": f"Chapter {n}", "page": p, "kids": []} for n, p in [(1, 10), (2, 30), (3, 60)]]
+        found, offset, _ = detect(FakeTools(textbook_pages(), outline=tree), textbook_pages())
+        self.assertEqual([(c["number"], c["start"], c["end"], c["source"]) for c in found], [(1, 10, 29, "outline"), (2, 30, 59, "outline"), (3, 60, 110, "outline")])
+
+    def test_bookmarks_plus_a_contents_page_give_the_offset_too(self):
+        tree = [{"title": f"Chapter {n}", "page": p + 9, "kids": []} for n, p in [(1, 1), (2, 21), (3, 47)]]
+        _, offset, _ = detect(FakeTools([], outline=tree), textbook_pages())
+        self.assertEqual(offset, 9)
+
+    def test_the_contents_page_is_used_without_bookmarks(self):
+        pages = textbook_pages(offset=6)
+        found, offset, _ = detect(FakeTools(pages), pages)
+        self.assertEqual(offset, 6)
+        self.assertEqual([(c["number"], c["start"], c["end"], c["source"]) for c in found], [(1, 7, 26, "toc"), (2, 27, 52, "toc"), (3, 53, 95, "toc")])
+
+    def test_a_book_with_bookmark_errors_falls_back_to_the_contents(self):
+        pages = textbook_pages()
+        found, _, _ = detect(FakeTools(pages, outline_error=ProcessingError("no")), pages)
+        self.assertEqual(len(found), 3)
+
+    def test_a_book_with_neither_has_no_chapters_and_is_still_fine(self):
+        pages = [REAL] * 40
+        self.assertEqual(detect(FakeTools(pages), pages)[:2], ([], None))
+
+    def test_a_contents_page_whose_chapters_cannot_be_found_gives_none_rather_than_a_guess(self):
+        pages = [REAL] * 110
+        pages[2] = CONTENTS_PAGE
+        self.assertEqual(detect(FakeTools(pages), pages)[:2], ([], None))
+
+    def test_a_text_book_never_spends_ocr_on_a_blank_page(self):
+        pages = textbook_pages()
+        pages[10] = ""   # a blank page in the middle of a book that has a text layer
+        tools = FakeTools(pages)
+        detect(tools, pages)
+        self.assertEqual(tools.ocr_calls, [])
+
+    def test_a_scanned_book_is_ocrd_to_find_where_chapters_start_and_the_text_is_kept(self):
+        pages = textbook_pages(offset=6, scanned_body=True)
+        ocr = {7: "Chapter 1\nBeginnings\nSome text here for the page", 27: "Chapter 2\nMiddles\nSome text here for the page", 53: "Chapter 3\nEndings\nSome text here for the page"}
+        tools = FakeTools(pages, ocr=ocr)
+        found, offset, updated = detect(tools, pages)
+        self.assertEqual(offset, 6)
+        self.assertEqual(len(found), 3)
+        self.assertTrue(updated[6][1] and updated[26][1])          # the pages OCR'd for this are recorded as OCR'd
+        self.assertIn("Beginnings", updated[6][0])
+        self.assertTrue(set(tools.ocr_calls) <= set(range(4, 111)))
+
+    def test_ocr_for_locating_chapters_is_rationed(self):
+        pages = textbook_pages(scanned_body=True)
+        tools = FakeTools(pages, ocr={})               # OCR never shows a heading
+        found, offset, _ = detect(tools, pages)
+        self.assertEqual((found, offset), ([], None))
+        self.assertLessEqual(len(tools.ocr_calls), 25)
+
+    def test_running_out_of_time_while_locating_chapters_is_not_fatal_to_the_caller(self):
+        pages = textbook_pages(scanned_body=True)
+        found, offset, _ = detect(FakeTools(pages), pages, deadline=time.monotonic() - 1)
+        self.assertEqual((found, offset), ([], None))

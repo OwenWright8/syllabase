@@ -58,6 +58,7 @@ export type Database = {
       }
       courses: {
         Row: {
+          class_time: string | null
           color: string | null
           created_at: string | null
           id: string
@@ -68,6 +69,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          class_time?: string | null
           color?: string | null
           created_at?: string | null
           id?: string
@@ -78,6 +80,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          class_time?: string | null
           color?: string | null
           created_at?: string | null
           id?: string

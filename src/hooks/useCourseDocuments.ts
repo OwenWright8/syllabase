@@ -27,6 +27,10 @@ export interface DocumentLimits {
   maxPages: number;
 }
 
+/** The server stores "unlimited" as a number too large to ever apply (1 PB); anything at or above this means no limit. */
+export const UNLIMITED_BYTES = 1e15;
+export const isUnlimited = (bytes: number) => bytes >= UNLIMITED_BYTES;
+
 export const documentKeys = {
   all: (userId: string) => ["documents", userId] as const,
   course: (userId: string, courseId: string) => ["documents", userId, "course", courseId] as const,

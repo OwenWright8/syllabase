@@ -306,6 +306,40 @@ jobs:
           enabled=$(curl -fsS "http://localhost:8080/rest/v1/document_limits?select=enabled" -H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}")
           echo "$enabled" | grep -q '"enabled":true'
 
+      # "unlimited" must really lift every limit (a private NAS instance wants
+      # that), and must not overflow the database's arithmetic. Then restore the
+      # defaults.
+      - name: DOCUMENT_*=unlimited lifts the limits
+        run: |
+          DOCUMENT_MAX_FILE_MB=unlimited DOCUMENT_USER_QUOTA_MB=unlimited DOCUMENT_MAX_PAGES=unlimited DOCUMENT_MAX_COUNT=unlimited docker compose up -d app
+          ./scripts/wait-for-stack.sh
+          auth=(-H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}")
+          limits=$(curl -fsS "http://localhost:8080/rest/v1/document_limits?select=max_file_bytes,max_user_bytes,max_pages,max_documents" "${auth[@]}")
+          echo "limits: $limits"
+          echo "$limits" | python3 -c "
+          import json,sys
+          row=json.load(sys.stdin)[0]
+          assert row['max_file_bytes']==row['max_user_bytes']==10**15, row
+          assert row['max_pages']==10**6 and row['max_documents']==10**6, row
+          "
+          uid=$(python3 -c "import json;print(json.load(open('login.json'))['user']['id'])")
+          course=$(curl -fsS -X POST http://localhost:8080/rest/v1/courses "${auth[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" \
+            -d "{\"user_id\":\"${uid}\",\"name\":\"Big\",\"short_code\":\"BIG\",\"color\":\"#000000\"}" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+          # a 50 GB file and a second 50 GB one: both accepted (only the row is made, nothing is uploaded)
+          for n in 1 2; do
+            code=$(curl -sS -o big.json -w '%{http_code}' -X POST http://localhost:8080/rest/v1/course_documents "${auth[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" \
+              -d "{\"user_id\":\"${uid}\",\"course_id\":\"${course}\",\"kind\":\"textbook\",\"filename\":\"atlas-${n}.pdf\",\"size_bytes\":53687091200}")
+            echo "50 GB document $n -> HTTP $code"; cat big.json; echo
+            [ "$code" = "201" ]
+          done
+          curl -fsS -X DELETE "http://localhost:8080/rest/v1/courses?id=eq.${course}" "${auth[@]}"
+          # back to the defaults
+          docker compose up -d app
+          ./scripts/wait-for-stack.sh
+          limits=$(curl -fsS "http://localhost:8080/rest/v1/document_limits?select=max_file_bytes,max_documents" "${auth[@]}")
+          echo "$limits" | grep -q '"max_file_bytes":209715200'
+          echo "$limits" | grep -q '"max_documents":200'
+
       # Chrome/Edge send `Accept-Encoding: gzip, deflate, br, zstd`. With that
       # header the edge runtime accepted the request, ran the function, and
       # never delivered the response. nginx strips it on /functions/v1/ — keep

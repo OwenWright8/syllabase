@@ -233,3 +233,33 @@ test.describe("course materials: after upload", () => {
     await expect(page.getByText(/Using 3\.0 MB of 1\.0 GB/)).toBeVisible();
   });
 });
+
+test.describe("course materials: limits", () => {
+  test("the usage line states the limits when there are some", async ({ context, page }) => {
+    await installFakeBackend(context, { courses: [makeCourse()] });
+    await openMaterials(page);
+    await expect(page.getByText("Using 0 B of 1.0 GB across all your courses. One file can be up to 200 MB.")).toBeVisible();
+  });
+
+  test("with unlimited settings it says there is no limit instead of showing a huge number", async ({ context, page }) => {
+    await installFakeBackend(context, { courses: [makeCourse()], documentLimits: { max_file_bytes: 1e15, max_user_bytes: 1e15 } });
+    await openMaterials(page);
+    await expect(page.getByText("Using 0 B across all your courses. There's no limit on the size of one file.")).toBeVisible();
+    await expect(page.getByText(/1000 TB|PB| of 1/)).toHaveCount(0);
+  });
+
+  test("a file over the default limit is accepted when the limits are unlimited, and refused when they aren't", async ({ context, page }) => {
+    const backend = await installFakeBackend(context, { courses: [makeCourse()], documentLimits: { max_file_bytes: 10 * MiB, max_user_bytes: 10 * MiB } });
+    await openMaterials(page);
+    await textbookInput(page).setInputFiles(upload("atlas.pdf", pdf(12 * MiB)));
+    await expect(page.getByText(/the limit for one file is 10\.0 MB|the limit for one file is 10 MB/)).toBeVisible();
+    expect(backend.posts("course_documents")).toEqual([]);
+
+    backend.db.document_limits[0].max_file_bytes = 1e15;
+    backend.db.document_limits[0].max_user_bytes = 1e15;
+    await page.reload();
+    await page.getByRole("tab", { name: "Materials" }).click();
+    await textbookInput(page).setInputFiles(upload("atlas.pdf", pdf(12 * MiB)));
+    await expect.poll(() => backend.posts("course_documents").length).toBe(1);
+  });
+});

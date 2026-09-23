@@ -64,6 +64,9 @@ export interface NewReading {
   document_id?: string;
   start_page?: number;
   end_page?: number;
+  /** For readings added already finished (a syllabus reading whose date has passed). */
+  status?: ReadingStatus;
+  completed_at?: string;
 }
 
 export function useReadings(courseId?: string) {

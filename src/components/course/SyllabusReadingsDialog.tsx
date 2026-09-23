@@ -9,7 +9,7 @@ import { CourseDocument } from "@/hooks/useCourseDocuments";
 import { useReadings, type NewReading } from "@/hooks/useReadings";
 import { useCourseBooks, useSyllabusText } from "@/hooks/useSyllabusReadings";
 import { useUserPreferences } from "@/hooks/useUserTimezone";
-import { getTodayInTimezone } from "@/lib/dateUtils";
+import { getTodayInTimezone, parseInTimezone } from "@/lib/dateUtils";
 import { extractReadings, plainPagesText, resolveInBook, resolveInBooks, type Book, type Candidate, type Resolution } from "@/lib/syllabus";
 
 const NO_BOOK = "none";
@@ -77,6 +77,7 @@ export function SyllabusReadingsDialog({ doc, onClose }: { doc: CourseDocument; 
             candidates={candidates}
             books={books}
             existing={existing.map((r) => ({ title: r.title, date: r.due_date }))}
+            timezone={timezone}
             onClose={onClose}
           />
         )}
@@ -90,14 +91,19 @@ function ReviewList({
   candidates,
   books,
   existing,
+  timezone,
   onClose,
 }: {
   courseId: string;
   candidates: Candidate[];
   books: Book[];
   existing: Array<{ title: string; date: string | null }>;
+  timezone: string;
   onClose: () => void;
 }) {
+  const today = getTodayInTimezone(timezone);
+  /** Whether a reading with this due date has already come and gone. */
+  const isPast = (date: string) => date !== "" && date < today;
   const { createReadings } = useReadings(courseId);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -143,6 +149,9 @@ function ReviewList({
         title,
         pages: resolution?.pages ?? plainPagesText(row.candidate.reference),
         ...(row.date ? { due_date: row.date } : {}),
+        // A reading that was due before today has been dealt with (or missed for good): add it as done,
+        // dated to its due date so it doesn't count as something finished this week.
+        ...(isPast(row.date) ? { status: "done" as const, completed_at: parseInTimezone(row.date, "23:59", timezone) } : {}),
         ...(resolution ? { document_id: resolution.bookId, start_page: resolution.start, end_page: resolution.end } : {}),
       });
     }
@@ -240,6 +249,7 @@ function ReviewList({
                         <AlertTriangle className="h-3 w-3" /> Read as month/day
                       </span>
                     )}
+                    {isPast(row.date) && <span className="text-muted-foreground">Due in the past: added as done</span>}
                     {row.alreadyAdded && <span className="text-muted-foreground">Already in your readings</span>}
                   </div>
                 </div>

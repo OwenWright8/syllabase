@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { test, expect, type Page } from "../playwright-fixture";
-import { installFakeBackend, makeCourse, COURSE_ID, USER_ID, type FakeBackend, type Row } from "./support/fakeBackend";
+import { installFakeBackend, makeCourse, COURSE_ID, USER_ID, ymdInTz, type FakeBackend, type Row } from "./support/fakeBackend";
 
 const BOOK_ID = "d0000000-0000-4000-8000-000000000001";
 const SYLLABUS_ID = "d0000000-0000-4000-8000-000000000002";
@@ -21,12 +21,12 @@ const CHAPTERS = [chapter(5, "Cell Structure", 130, 171), chapter(6, "Energy", 1
 
 // Explicit years, so the specs don't depend on today's date.
 const SYLLABUS = [
-  "CHEM 111 - Fall 2026",
+  "CHEM 111 - Fall 2099",
   "Week   Date            Reading              Assignment",
-  "1      Oct 18, 2026    Chapter 5            HW 1 due",
-  "2      Oct 25, 2026    Chapters 6-7",
-  "3      Nov 1, 2026     Chapter 9",
-  "Midterm Exam Nov 8, 2026 (covers Chapters 5-7)",
+  "1      Oct 18, 2099    Chapter 5            HW 1 due",
+  "2      Oct 25, 2099    Chapters 6-7",
+  "3      Nov 1, 2099     Chapter 9",
+  "Midterm Exam Nov 8, 2099 (covers Chapters 5-7)",
 ].join("\n");
 
 const syllabusPage = (text: string): Row => ({ id: "page-1", document_id: SYLLABUS_ID, page: 1, user_id: USER_ID, text, ocr: false });
@@ -75,7 +75,7 @@ test.describe("finding readings in a syllabus", () => {
 
     const first = rows(page).nth(0);
     await expect(first.getByLabel(/^Title for Chapter 5/)).toHaveValue("Chapter 5: Cell Structure");
-    await expect(first.getByLabel(/^Due date for Chapter 5/)).toHaveValue("2026-10-18");
+    await expect(first.getByLabel(/^Due date for Chapter 5/)).toHaveValue("2099-10-18");
     await expect(first).toContainText("Download: Ch. 5 (pp. 130–171)");
     await expect(first).toContainText("Chapter 5            HW 1 due");
 
@@ -109,9 +109,9 @@ test.describe("finding readings in a syllabus", () => {
     await expect(page.getByText("Added 3 readings")).toBeVisible();
 
     expect(backend.posts("readings")).toEqual([
-      { user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 5: Cell Structure", pages: "Ch. 5 (pp. 130–171)", due_date: "2026-10-18", document_id: BOOK_ID, start_page: 130, end_page: 171 },
-      { user_id: USER_ID, course_id: COURSE_ID, title: "Chapters 6–7", pages: "Ch. 6–7 (pp. 172–260)", due_date: "2026-10-25", document_id: BOOK_ID, start_page: 172, end_page: 260 },
-      { user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 9", pages: "Ch. 9", due_date: "2026-11-01" },
+      { user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 5: Cell Structure", pages: "Ch. 5 (pp. 130–171)", due_date: "2099-10-18", document_id: BOOK_ID, start_page: 130, end_page: 171 },
+      { user_id: USER_ID, course_id: COURSE_ID, title: "Chapters 6–7", pages: "Ch. 6–7 (pp. 172–260)", due_date: "2099-10-25", document_id: BOOK_ID, start_page: 172, end_page: 260 },
+      { user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 9", pages: "Ch. 9", due_date: "2099-11-01" },
     ]);
     expect(backend.writes.filter((w) => w.table === "readings")).toHaveLength(1); // one request: all or none
   });
@@ -120,11 +120,11 @@ test.describe("finding readings in a syllabus", () => {
     await findReadings(page);
     await rows(page).nth(2).getByRole("checkbox").click();
     await rows(page).nth(0).getByLabel(/^Title for/).fill("Read the cell chapter");
-    await rows(page).nth(0).getByLabel(/^Due date for/).fill("2026-10-19");
+    await rows(page).nth(0).getByLabel(/^Due date for/).fill("2099-10-19");
     await page.getByRole("button", { name: "Add 2 readings" }).click();
 
     await expect.poll(() => backend.posts("readings").length).toBe(2);
-    expect(backend.posts("readings")[0]).toMatchObject({ title: "Read the cell chapter", due_date: "2026-10-19", document_id: BOOK_ID });
+    expect(backend.posts("readings")[0]).toMatchObject({ title: "Read the cell chapter", due_date: "2099-10-19", document_id: BOOK_ID });
     expect(backend.posts("readings").map((r) => r.title)).not.toContain("Chapter 9");
   });
 
@@ -144,7 +144,7 @@ test.describe("finding readings in a syllabus", () => {
     await expect(rows(page).nth(0)).not.toContainText("Download:");
     await page.getByRole("button", { name: "Add 3 readings" }).click();
     await expect.poll(() => backend.posts("readings").length).toBe(3);
-    expect(backend.posts("readings")[0]).toEqual({ user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 5", pages: "Ch. 5", due_date: "2026-10-18" });
+    expect(backend.posts("readings")[0]).toEqual({ user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 5", pages: "Ch. 5", due_date: "2099-10-18" });
   });
 
   test("a title that was typed by hand survives changing the textbook", async ({ page }) => {
@@ -181,7 +181,7 @@ test.describe("finding readings: other cases", () => {
   test("readings already in the list start unticked", async ({ context, page }) => {
     await installFakeBackend(context, {
       courses: [makeCourse()], documents: [doc({}), syllabusDoc()], chapters: CHAPTERS, pages: [syllabusPage(SYLLABUS)],
-      readings: [{ id: "r1", user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 5: Cell Structure", pages: null, due_date: "2026-10-18", status: "not_started", created_at: new Date().toISOString() }],
+      readings: [{ id: "r1", user_id: USER_ID, course_id: COURSE_ID, title: "Chapter 5: Cell Structure", pages: null, due_date: "2099-10-18", status: "not_started", created_at: new Date().toISOString() }],
     });
     await findReadings(page);
     await expect(rows(page).nth(0)).toContainText("Already in your readings");
@@ -209,26 +209,26 @@ test.describe("finding readings: other cases", () => {
 
   test("week numbers are dated from the semester start, and the dialog says the date is an estimate", async ({ context, page }) => {
     await installFakeBackend(context, {
-      courses: [makeCourse()], documents: [doc({}), syllabusDoc()], chapters: CHAPTERS, semesterStart: "2026-08-24",
+      courses: [makeCourse()], documents: [doc({}), syllabusDoc()], chapters: CHAPTERS, semesterStart: "2099-08-24",
       pages: [syllabusPage("Week 3: Read Chapter 5\nWeek 5: Read Chapter 6")],
     });
     await findReadings(page);
-    await expect(rows(page).nth(0).getByLabel(/^Due date for/)).toHaveValue("2026-09-07");
+    await expect(rows(page).nth(0).getByLabel(/^Due date for/)).toHaveValue("2099-09-07");
     await expect(rows(page).nth(0)).toContainText("Date estimated from the week number");
-    await expect(rows(page).nth(1).getByLabel(/^Due date for/)).toHaveValue("2026-09-21");
+    await expect(rows(page).nth(1).getByLabel(/^Due date for/)).toHaveValue("2099-09-21");
   });
 
   test("an ambiguous date is called out", async ({ context, page }) => {
-    await installFakeBackend(context, { courses: [makeCourse()], documents: [syllabusDoc()], pages: [syllabusPage("Read Chapter 5 by 3/4/2027")] });
+    await installFakeBackend(context, { courses: [makeCourse()], documents: [syllabusDoc()], pages: [syllabusPage("Read Chapter 5 by 3/4/2099")] });
     await findReadings(page);
     await expect(rows(page).nth(0)).toContainText("Read as month/day");
-    await expect(rows(page).nth(0).getByLabel(/^Due date for/)).toHaveValue("2027-03-04");
+    await expect(rows(page).nth(0).getByLabel(/^Due date for/)).toHaveValue("2099-03-04");
   });
 
   test("printed page numbers are shifted by the book's offset", async ({ context, page }) => {
     const backend = await installFakeBackend(context, {
       courses: [makeCourse()], documents: [doc({ page_offset: 12 }), syllabusDoc()], chapters: [],
-      pages: [syllabusPage("Oct 18, 2026   Read pp. 101-130")],
+      pages: [syllabusPage("Oct 18, 2099   Read pp. 101-130")],
     });
     await findReadings(page);
     await expect(rows(page).nth(0)).toContainText("Download: pp. 101–130");
@@ -286,5 +286,68 @@ test.describe("readings with a download", () => {
     await page.getByRole("tab", { name: /Readings/ }).click();
     await expect(page.getByText("Chapter 5: Cell Structure")).toBeVisible();
     await expect(page.getByRole("button", { name: /^Download/ })).toHaveCount(0);
+  });
+});
+
+test.describe("readings that were due in the past", () => {
+  const TZ = "America/New_York";
+  const today = () => ymdInTz(new Date(), TZ);
+
+  async function withSyllabus(context: Parameters<typeof installFakeBackend>[0], text: string) {
+    return installFakeBackend(context, { timezone: TZ, courses: [makeCourse()], documents: [doc({}), syllabusDoc()], chapters: CHAPTERS, pages: [syllabusPage(text)] });
+  }
+
+  test("a reading whose date has passed is added as done, and one that hasn't is not", async ({ context, page }) => {
+    const backend = await withSyllabus(context, ["Mar 5, 2020   Read Chapter 5", "Oct 18, 2099   Read Chapter 6"].join("\n"));
+    await findReadings(page);
+    await expect(rows(page).nth(0)).toContainText("Due in the past: added as done");
+    await expect(rows(page).nth(1)).not.toContainText("Due in the past");
+    await page.getByRole("button", { name: "Add 2 readings" }).click();
+
+    await expect.poll(() => backend.posts("readings").length).toBe(2);
+    const [past, future] = backend.posts("readings");
+    expect(past).toMatchObject({ title: "Chapter 5: Cell Structure", due_date: "2020-03-05", status: "done" });
+    // dated to the end of its due day in the profile's timezone, so it isn't counted as finished this week
+    expect(past.completed_at).toBe("2020-03-06T04:59:00.000Z");
+    expect(future).not.toHaveProperty("status");
+    expect(future).not.toHaveProperty("completed_at");
+  });
+
+  test("a reading due today is not in the past", async ({ context, page }) => {
+    const backend = await withSyllabus(context, `${today()}   Read Chapter 5`);
+    await findReadings(page);
+    await expect(rows(page).nth(0)).not.toContainText("Due in the past");
+    await page.getByRole("button", { name: "Add 1 reading" }).click();
+    await expect.poll(() => backend.posts("readings").length).toBe(1);
+    expect(backend.posts("readings")[0]).not.toHaveProperty("status");
+  });
+
+  test("a reading with no date is not marked done", async ({ context, page }) => {
+    const backend = await withSyllabus(context, "Required reading: Chapter 5");
+    await findReadings(page);
+    await page.getByRole("button", { name: "Add 1 reading" }).click();
+    await expect.poll(() => backend.posts("readings").length).toBe(1);
+    expect(backend.posts("readings")[0]).not.toHaveProperty("status");
+  });
+
+  test("changing the date in the review changes whether it counts as past", async ({ context, page }) => {
+    const backend = await withSyllabus(context, "Oct 18, 2099   Read Chapter 5");
+    await findReadings(page);
+    await expect(rows(page).nth(0)).not.toContainText("Due in the past");
+    await rows(page).nth(0).getByLabel(/^Due date for/).fill("2020-01-02");
+    await expect(rows(page).nth(0)).toContainText("Due in the past: added as done");
+    await page.getByRole("button", { name: "Add 1 reading" }).click();
+    await expect.poll(() => backend.posts("readings").length).toBe(1);
+    expect(backend.posts("readings")[0]).toMatchObject({ due_date: "2020-01-02", status: "done" });
+  });
+
+  test("clearing the date of a past reading makes it an ordinary undone reading", async ({ context, page }) => {
+    const backend = await withSyllabus(context, "Mar 5, 2020   Read Chapter 5");
+    await findReadings(page);
+    await rows(page).nth(0).getByLabel(/^Due date for/).fill("");
+    await expect(rows(page).nth(0)).not.toContainText("Due in the past");
+    await page.getByRole("button", { name: "Add 1 reading" }).click();
+    await expect.poll(() => backend.posts("readings").length).toBe(1);
+    expect(backend.posts("readings")[0]).not.toHaveProperty("status");
   });
 });

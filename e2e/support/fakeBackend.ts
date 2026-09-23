@@ -313,7 +313,7 @@ export class FakeBackend {
       // The fake mostly ignores filters, but equality on these ids matters to how
       // the app scopes documents (per course, per document).
       let source = this.db[table];
-      for (const column of ["course_id", "document_id", "id", "start_page", "end_page"]) {
+      for (const column of table === "course_documents" ? ["course_id", "document_id", "id", "kind", "status"] : ["course_id", "document_id", "id", "start_page", "end_page"]) {
         const wanted = url.searchParams.get(column);
         if (wanted?.startsWith("eq.")) source = source.filter((r) => !(column in r) || String(r[column]) === wanted.slice(3));
       }

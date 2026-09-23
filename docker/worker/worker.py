@@ -36,6 +36,8 @@ log = logging.getLogger("worker")
 
 STALE_UPLOAD_HOURS = 24
 STALE_EXTRACT_HOURS = 1
+# Postgres can't store a single value over 1 GB, so no extract can be larger than this, whatever the file limit.
+EXTRACT_MAX_BYTES = 1_000_000_000
 JOB_KINDS = ('documents', 'extracts')
 HOUSEKEEPING_EVERY_SECONDS = 600
 
@@ -275,7 +277,7 @@ def process_extract(connection, tools, cfg, limits, extract):
         size = os.path.getsize(result) if os.path.exists(result) else 0
         if size == 0:
             raise ProcessingError("Those pages couldn't be cut out of the book.")
-        if size > limits["max_file_bytes"]:
+        if size > min(limits["max_file_bytes"], EXTRACT_MAX_BYTES):
             raise ProcessingError("Those pages make a file larger than this server allows. Try a smaller range.")
         with open(result, "rb") as handle:
             data = handle.read()

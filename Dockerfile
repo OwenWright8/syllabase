@@ -41,9 +41,21 @@ FROM supabase/edge-runtime:v1.76.2 AS edge-runtime-src
 
 FROM nginx:1.27-bookworm
 
+# The second group is for course materials (uploaded textbooks and syllabi):
+# poppler reads PDF text and renders pages, qpdf checks/splits PDFs, tesseract
+# does OCR (English; add tesseract-ocr-<lang> here for other languages), and
+# python3 + psycopg2 run the worker in docker/worker. setpriv (util-linux) is
+# how the worker drops privileges.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       postgresql-client gettext-base tini curl ca-certificates openssl \
-    && rm -rf /var/lib/apt/lists/*
+      python3 python3-psycopg2 poppler-utils qpdf tesseract-ocr tesseract-ocr-eng util-linux \
+    && rm -rf /var/lib/apt/lists/* \
+    # The worker parses untrusted files, so it runs as its own user with a
+    # private scratch directory and nothing else to its name.
+    && useradd --system --no-create-home --home-dir /var/lib/syllabase-worker --shell /usr/sbin/nologin syllabase-worker \
+    && mkdir -p /var/lib/syllabase-worker/tmp \
+    && chown -R syllabase-worker:syllabase-worker /var/lib/syllabase-worker \
+    && chmod 700 /var/lib/syllabase-worker
 
 COPY --from=gotrue-src /usr/local/bin/gotrue /usr/local/bin/gotrue
 COPY --from=postgrest-src /bin/postgrest /usr/local/bin/postgrest
@@ -58,6 +70,9 @@ COPY docker/env.js.template /app/env.js.template
 COPY docker/nginx.app.conf /etc/nginx/conf.d/default.conf
 COPY docker/start.sh /app/start.sh
 COPY docker/secrets.sh /app/secrets.sh
+COPY docker/documents.sh /app/documents.sh
+# Root-owned and read-only to the worker user, so a bug in the worker can't rewrite its own code.
+COPY docker/worker /app/worker
 RUN chmod +x /app/start.sh /app/migrate.sh
 
 EXPOSE 8080

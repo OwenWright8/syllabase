@@ -35,6 +35,12 @@ jobs:
       - name: Container script tests
         run: bash docker/tests/run-all.sh
 
+      # The document worker's logic (file-type checks, OCR decisions, job control
+      # flow, limits), against a fake database and fake PDF tools. The real tools
+      # and SQL run in the docker job below.
+      - name: Document worker tests
+        run: python3 -m unittest discover -s docker/worker/tests -v
+
       - run: npm run build
 
   # Browser tests against the real UI, with the backend replaced by an

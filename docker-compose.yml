@@ -74,6 +74,11 @@ services:
       ANON_KEY: ${ANON_KEY:-}
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
+      # Course materials (uploaded textbooks and syllabi). All optional.
+      DOCUMENTS: ${DOCUMENTS:-on}
+      DOCUMENT_MAX_FILE_MB: ${DOCUMENT_MAX_FILE_MB:-}
+      DOCUMENT_USER_QUOTA_MB: ${DOCUMENT_USER_QUOTA_MB:-}
+      DOCUMENT_MAX_PAGES: ${DOCUMENT_MAX_PAGES:-}
     volumes:
       - secrets:/secrets
     logging: *default-logging

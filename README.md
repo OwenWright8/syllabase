@@ -54,6 +54,11 @@ services:
       ANON_KEY: ${ANON_KEY:-}
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
+      # Course materials (uploaded textbooks and syllabi). All optional.
+      DOCUMENTS: ${DOCUMENTS:-on}
+      DOCUMENT_MAX_FILE_MB: ${DOCUMENT_MAX_FILE_MB:-}
+      DOCUMENT_USER_QUOTA_MB: ${DOCUMENT_USER_QUOTA_MB:-}
+      DOCUMENT_MAX_PAGES: ${DOCUMENT_MAX_PAGES:-}
     volumes:
       - secrets:/secrets
     security_opt:
@@ -90,6 +95,8 @@ None of these are required. Docker Compose reads a `.env` file next to `docker-c
 |---|---|
 | `POSTGRES_PASSWORD`, `JWT_SECRET`, `CRON_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY` | Use your own secrets instead of generated ones. |
 | `APP_PORT` | The port the app is published on (default `8080`). |
+| `DOCUMENTS` | `off` disables uploading textbooks/syllabi and doesn't start the OCR worker (default `on`). |
+| `DOCUMENT_MAX_FILE_MB`, `DOCUMENT_USER_QUOTA_MB`, `DOCUMENT_MAX_PAGES` | Largest single upload (default 200 MB), total per user (default 1024 MB), and most pages in a PDF (default 1500). Sign-up is open, so these bound what any one account can store. |
 | `SYLLABASE_VERSION` | Pin to a release tag (e.g. `v0.4.0`) instead of `latest`. |
 
 ### Upgrading

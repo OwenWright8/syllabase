@@ -94,13 +94,12 @@ DATABASE_URL="$DB_URL" MIGRATIONS_DIR="/app/migrations" /app/migrate.sh
 echo "[start] applying document limits (uploads $DOC_ENABLED)..."
 psql "$DB_URL" -v ON_ERROR_STOP=1 \
   -v enabled="$DOC_ENABLED" -v max_file="$DOC_MAX_FILE_BYTES" \
-  -v max_user="$DOC_USER_QUOTA_BYTES" -v max_pages="$DOC_MAX_PAGES" \
+  -v max_user="$DOC_USER_QUOTA_BYTES" \
   -v max_documents="$DOC_MAX_COUNT" <<'SQLEOF'
 UPDATE public.document_limits
    SET enabled = :'enabled'::boolean,
        max_file_bytes = :max_file,
        max_user_bytes = :max_user,
-       max_pages = :max_pages,
        max_documents = :max_documents;
 SQLEOF
 

@@ -6,15 +6,14 @@
 #   DOCUMENTS               on (default) | off: uploads, and the worker that processes them
 #   DOCUMENT_MAX_FILE_MB    largest single file             (default 200, or "unlimited")
 #   DOCUMENT_USER_QUOTA_MB  total per user across all files (default 1024, or "unlimited")
-#   DOCUMENT_MAX_PAGES      most pages a PDF may have       (default 1500, or "unlimited")
 #   DOCUMENT_MAX_COUNT      most documents per user         (default 200, or "unlimited")
 #
 # "unlimited" isn't a special case in the database: it is stored as a number so
 # far above anything real (1 petabyte, a million pages) that it never applies,
 # and the app recognises it to say "no limit" rather than show the number.
+# (There is deliberately no limit on the number of pages in a PDF.)
 
 DOC_UNLIMITED_BYTES=1000000000000000
-DOC_UNLIMITED_PAGES=1000000
 DOC_UNLIMITED_COUNT=1000000
 
 # doc_is_unlimited NAME — true if NAME is set to "unlimited" (any case).
@@ -40,7 +39,7 @@ doc_positive_int() {
   printf '%s' "$_value"
 }
 
-# documents_settings — sets DOC_ENABLED (true|false) and the four limits.
+# documents_settings — sets DOC_ENABLED (true|false) and the three limits.
 documents_settings() {
   case "$(printf '%s' "${DOCUMENTS:-on}" | tr 'A-Z' 'a-z')" in
     on|true|1|yes) DOC_ENABLED=true ;;
@@ -61,11 +60,6 @@ documents_settings() {
   else
     _quota_mb=$(doc_positive_int DOCUMENT_USER_QUOTA_MB 1024 100000000)
     DOC_USER_QUOTA_BYTES=$((_quota_mb * 1048576))
-  fi
-  if doc_is_unlimited DOCUMENT_MAX_PAGES; then
-    DOC_MAX_PAGES=$DOC_UNLIMITED_PAGES
-  else
-    DOC_MAX_PAGES=$(doc_positive_int DOCUMENT_MAX_PAGES 1500 100000)
   fi
   if doc_is_unlimited DOCUMENT_MAX_COUNT; then
     DOC_MAX_COUNT=$DOC_UNLIMITED_COUNT

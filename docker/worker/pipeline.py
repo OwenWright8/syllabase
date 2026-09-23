@@ -13,7 +13,7 @@ from tools import ProcessingError
 TEXT_BLOCK_PAGES = 50
 
 
-def extract(tools, path, kind, header, cfg, limits, report, deadline):
+def extract(tools, path, kind, header, cfg, report, deadline):
     """Return (pages, kind_of_file) where pages is a list of (text, was_ocr).
 
     `kind` is what the user said it is ('textbook' or 'syllabus'); the file's real
@@ -27,7 +27,7 @@ def extract(tools, path, kind, header, cfg, limits, report, deadline):
         raise ProcessingError("Textbooks need to be PDF files.")
 
     if actual == "pdf":
-        return extract_pdf(tools, path, kind, cfg, limits, report, deadline), "pdf"
+        return extract_pdf(tools, path, kind, cfg, report, deadline), "pdf"
     if actual == "zip":
         try:
             text = docproc.docx_text(path)
@@ -49,15 +49,13 @@ def _check_deadline(deadline):
         raise ProcessingError("Processing this file took too long and was stopped.")
 
 
-def extract_pdf(tools, path, kind, cfg, limits, report, deadline):
+def extract_pdf(tools, path, kind, cfg, report, deadline):
     if tools.needs_password(path):
         raise ProcessingError("That PDF is password-protected. Remove the password and upload it again.")
 
     total = tools.page_count(path)
     if total < 1:
         raise ProcessingError("That PDF has no pages.")
-    if total > limits["max_pages"]:
-        raise ProcessingError(f"That PDF has {total} pages; the limit is {limits['max_pages']}.")
 
     # 1. The text layer, a block of pages at a time.
     pages = []

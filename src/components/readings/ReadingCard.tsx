@@ -11,8 +11,10 @@ import {
   Clock,
   MoreHorizontal,
   Trash2,
+  Download,
   Edit2,
-  Link2
+  Link2,
+  Loader2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -23,6 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { format, parseISO, isToday, isPast, isTomorrow } from "date-fns";
+import { usePageDownloads } from "@/hooks/usePageDownloads";
+import { downloadFilename } from "@/lib/documentPages";
 
 interface ReadingCardProps {
   reading: Reading;
@@ -61,6 +65,20 @@ export function ReadingCard({
 }: ReadingCardProps) {
   const status = statusConfig[reading.status];
   const StatusIcon = status.icon;
+  const downloads = usePageDownloads();
+
+  // A reading linked to a textbook range can hand over just those pages.
+  const range =
+    !reading.isTask && reading.document_id && reading.start_page != null && reading.end_page != null
+      ? {
+          documentId: reading.document_id,
+          start: reading.start_page,
+          end: reading.end_page,
+          filename: downloadFilename(reading.document?.filename ?? "Textbook", reading.title, reading.start_page, reading.end_page),
+        }
+      : null;
+  const downloading = range ? downloads.isBusy(range) : false;
+  const downloadLabel = `Download ${reading.pages || "pages"}`;
 
   const getDueDateLabel = () => {
     if (!reading.due_date) return null;
@@ -114,6 +132,20 @@ export function ReadingCard({
             )}
           </div>
         </div>
+
+        {range && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0"
+            aria-label={downloadLabel}
+            title={downloadLabel}
+            disabled={downloading}
+            onClick={() => downloads.download(range)}
+          >
+            {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          </Button>
+        )}
 
         {showCourse && reading.course && (
           <CourseChip shortCode={reading.course.short_code} color={reading.course.color} />
@@ -201,6 +233,20 @@ export function ReadingCard({
                   <Calendar className="h-3 w-3 mr-1" />
                   {dueInfo.label}
                 </Badge>
+              )}
+
+              {range && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 gap-1 px-2 text-xs"
+                  aria-label={downloadLabel}
+                  disabled={downloading}
+                  onClick={() => downloads.download(range)}
+                >
+                  {downloading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                  {downloadLabel}
+                </Button>
               )}
 
               {hasLinks && (

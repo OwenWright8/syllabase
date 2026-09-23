@@ -19,8 +19,13 @@ export interface Reading {
   exam_id: string | null;
   planned_date: string | null;
   plan_order: number | null;
+  /** The textbook (and PDF pages of it) this reading covers, so it can offer "download just this". */
+  document_id: string | null;
+  start_page: number | null;
+  end_page: number | null;
   created_at: string;
   updated_at: string;
+  document?: { id: string; filename: string } | null;
   course?: {
     id: string;
     name: string;
@@ -40,8 +45,25 @@ export const readingKeys = {
   upcoming: (userId: string) => ["readings", userId, "upcoming"] as const,
 };
 
-function transformCourse<T extends { course: unknown }>(row: T) {
-  return { ...row, course: Array.isArray(row.course) ? row.course[0] : row.course };
+const READING_COLUMNS = `*, course:courses (id, name, short_code, color), document:course_documents (id, filename)`;
+
+function transformCourse<T extends { course: unknown; document?: unknown }>(row: T) {
+  const first = (value: unknown) => (Array.isArray(value) ? value[0] : value);
+  return { ...row, course: first(row.course), document: first(row.document) ?? null };
+}
+
+/** What can be set when a reading is created. */
+export interface NewReading {
+  course_id: string;
+  title: string;
+  pages?: string;
+  due_date?: string;
+  flashcard_deck_id?: string;
+  task_id?: string;
+  exam_id?: string;
+  document_id?: string;
+  start_page?: number;
+  end_page?: number;
 }
 
 export function useReadings(courseId?: string) {
@@ -53,7 +75,7 @@ export function useReadings(courseId?: string) {
     queryFn: async () => {
       let request = supabase
         .from("readings")
-        .select(`*, course:courses (id, name, short_code, color)`)
+        .select(READING_COLUMNS)
         .eq("user_id", user!.id)
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
@@ -74,19 +96,19 @@ export function useReadings(courseId?: string) {
   };
 
   const createMutation = useMutation({
-    mutationFn: async (reading: {
-      course_id: string;
-      title: string;
-      pages?: string;
-      due_date?: string;
-      flashcard_deck_id?: string;
-      task_id?: string;
-      exam_id?: string;
-    }) => {
+    mutationFn: async (reading: NewReading) => {
       const { error } = await supabase.from("readings").insert({
         user_id: user!.id,
         ...reading,
       });
+      if (error) throw error;
+    },
+    onSuccess: invalidateReadings,
+  });
+
+  const createManyMutation = useMutation({
+    mutationFn: async (readings: NewReading[]) => {
+      const { error } = await supabase.from("readings").insert(readings.map((reading) => ({ user_id: user!.id, ...reading })));
       if (error) throw error;
     },
     onSuccess: invalidateReadings,
@@ -121,15 +143,7 @@ export function useReadings(courseId?: string) {
     onSuccess: invalidateReadings,
   });
 
-  const createReading: (reading: {
-    course_id: string;
-    title: string;
-    pages?: string;
-    due_date?: string;
-    flashcard_deck_id?: string;
-    task_id?: string;
-    exam_id?: string;
-  }) => Promise<{ success: boolean; error?: string }> = async (reading) => {
+  const createReading: (reading: NewReading) => Promise<{ success: boolean; error?: string }> = async (reading) => {
     if (!user) return { success: false, error: "Not authenticated" };
     try {
       await createMutation.mutateAsync(reading);
@@ -137,6 +151,17 @@ export function useReadings(courseId?: string) {
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : "Failed to create reading" };
+    }
+  };
+
+  /** Add several readings in one go (all or none). */
+  const createReadings = async (readings: NewReading[]): Promise<{ success: boolean }> => {
+    if (!user || readings.length === 0) return { success: false };
+    try {
+      await createManyMutation.mutateAsync(readings);
+      return { success: true };
+    } catch {
+      return { success: false }; // the global mutation error handler has shown why
     }
   };
 
@@ -172,6 +197,7 @@ export function useReadings(courseId?: string) {
     readings: query.data ?? [],
     loading: query.isLoading,
     createReading,
+    createReadings,
     updateReading,
     updateStatus,
     deleteReading,
@@ -190,7 +216,7 @@ export function useUpcomingReadings() {
 
       const { data, error } = await supabase
         .from("readings")
-        .select(`*, course:courses (id, name, short_code, color)`)
+        .select(READING_COLUMNS)
         .eq("user_id", user!.id)
         .neq("status", "done")
         .or(`due_date.is.null,due_date.gte.${today}`)

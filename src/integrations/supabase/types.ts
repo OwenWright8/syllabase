@@ -443,13 +443,16 @@ export type Database = {
           completed_at: string | null
           course_id: string
           created_at: string
+          document_id: string | null
           due_date: string | null
+          end_page: number | null
           exam_id: string | null
           flashcard_deck_id: string | null
           id: string
           pages: string | null
           plan_order: number | null
           planned_date: string | null
+          start_page: number | null
           status: string
           task_id: string | null
           title: string
@@ -460,13 +463,16 @@ export type Database = {
           completed_at?: string | null
           course_id: string
           created_at?: string
+          document_id?: string | null
           due_date?: string | null
+          end_page?: number | null
           exam_id?: string | null
           flashcard_deck_id?: string | null
           id?: string
           pages?: string | null
           plan_order?: number | null
           planned_date?: string | null
+          start_page?: number | null
           status?: string
           task_id?: string | null
           title: string
@@ -477,13 +483,16 @@ export type Database = {
           completed_at?: string | null
           course_id?: string
           created_at?: string
+          document_id?: string | null
           due_date?: string | null
+          end_page?: number | null
           exam_id?: string | null
           flashcard_deck_id?: string | null
           id?: string
           pages?: string | null
           plan_order?: number | null
           planned_date?: string | null
+          start_page?: number | null
           status?: string
           task_id?: string | null
           title?: string
@@ -496,6 +505,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "readings_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "course_documents"
             referencedColumns: ["id"]
           },
           {

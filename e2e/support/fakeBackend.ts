@@ -50,6 +50,8 @@ export interface Write {
 export interface FakeBackendOptions {
   /** Profile timezone (defaults to America/New_York, like a fresh account). */
   timezone?: string;
+  /** The profile's semester start (YYYY-MM-DD). */
+  semesterStart?: string;
   themePreference?: string;
   colorTheme?: string;
   /** Answer to the first-run check on the sign-in page. */
@@ -60,6 +62,9 @@ export interface FakeBackendOptions {
   tasks?: Row[];
   documents?: Row[];
   chapters?: Row[];
+  /** Extracted text of documents (one row per page: document_id, page, text). */
+  pages?: Row[];
+  readings?: Row[];
   /** Override the upload limits (same names as the document_limits columns). */
   documentLimits?: Partial<{ enabled: boolean; max_file_bytes: number; max_user_bytes: number; max_pages: number }>;
   /** Origin the app is loaded from (default: APP_ORIGIN). */
@@ -110,12 +115,14 @@ export class FakeBackend {
       timezone: options.timezone ?? "America/New_York",
       color_theme: options.colorTheme ?? "sage",
       theme_preference: options.themePreference ?? "light",
-      semester_start: null,
+      semester_start: options.semesterStart ?? null,
     });
     this.db.courses.push(...(options.courses ?? []));
     this.db.tasks.push(...(options.tasks ?? []));
     this.db.course_documents.push(...(options.documents ?? []));
     this.db.document_chapters.push(...(options.chapters ?? []));
+    this.db.document_pages.push(...(options.pages ?? []));
+    this.db.readings.push(...(options.readings ?? []));
     this.db.document_limits.push({
       id: "limits",
       singleton: true,
@@ -147,6 +154,7 @@ export class FakeBackend {
     if ("course_id" in row) out.course = this.db.courses.find((c) => c.id === row.course_id) ?? null;
     if ("exam_id" in row) out.exam = this.db.exams.find((e) => e.id === row.exam_id) ?? null;
     if ("quiz_id" in row) out.quiz = this.db.quizzes.find((q) => q.id === row.quiz_id) ?? null;
+    if ("document_id" in row) out.document = this.db.course_documents.find((d) => d.id === row.document_id) ?? null;
     return out;
   }
 
@@ -212,6 +220,16 @@ export class FakeBackend {
     if (!(start >= 1) || end < start) return bad("new row violates check constraint");
     if (end > Number(doc.page_count)) return bad(`That range ends after the last page (the book has ${doc.page_count} pages).`);
     if (!existing && this.db.document_chapters.filter((c) => c.document_id === doc.id).length >= 500) return bad("A book can have at most 500 chapters.");
+    return null;
+  }
+
+  /** The readings trigger + constraint: a link is to the user's own document, and the pages come as a valid pair. */
+  private checkReading(item: Record<string, unknown>) {
+    const bad = (message: string) => ({ status: 400, body: { code: "23514", message, details: null, hint: null } });
+    if (item.document_id && !this.db.course_documents.some((d) => d.id === item.document_id)) return bad("A reading can only link to one of your own documents.");
+    const hasStart = item.start_page != null;
+    const hasEnd = item.end_page != null;
+    if (hasStart !== hasEnd || (hasStart && Number(item.end_page) < Number(item.start_page))) return bad('new row violates check constraint "readings_page_range"');
     return null;
   }
 
@@ -309,6 +327,12 @@ export class FakeBackend {
     if (method === "POST") {
       const body = JSON.parse(request.postData() ?? "[]") as Record<string, unknown> | Record<string, unknown>[];
       const items = Array.isArray(body) ? body : [body];
+      if (table === "readings") {
+        for (const item of items) {
+          const refusal = this.checkReading(item);
+          if (refusal) return json(refusal.status, refusal.body);
+        }
+      }
       if (table === "course_documents" || table === "course_document_chunks" || table === "document_chapters" || table === "document_extracts") {
         const refusal =
           table === "course_documents"
@@ -383,6 +407,8 @@ export class FakeBackend {
         this.db.document_pages = this.db.document_pages.filter((p) => p.document_id !== id);
         this.db.document_chapters = this.db.document_chapters.filter((c) => c.document_id !== id);
         this.db.document_extracts = this.db.document_extracts.filter((e) => e.document_id !== id);
+        // readings.document_id is ON DELETE SET NULL: the reading stays, without its download
+        for (const reading of this.db.readings) if (reading.document_id === id) reading.document_id = null;
       }
       return route.fulfill({ status: 204, headers: cors });
     }

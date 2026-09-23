@@ -66,7 +66,7 @@ export interface FakeBackendOptions {
   pages?: Row[];
   readings?: Row[];
   /** Override the upload limits (same names as the document_limits columns). */
-  documentLimits?: Partial<{ enabled: boolean; max_file_bytes: number; max_user_bytes: number; max_pages: number }>;
+  documentLimits?: Partial<{ enabled: boolean; max_file_bytes: number; max_user_bytes: number; max_pages: number; max_documents: number }>;
   /** Origin the app is loaded from (default: APP_ORIGIN). */
   origin?: string;
 }
@@ -130,6 +130,7 @@ export class FakeBackend {
       max_file_bytes: 200 * 1024 * 1024,
       max_user_bytes: 1024 * 1024 * 1024,
       max_pages: 1500,
+      max_documents: 200,
       ...options.documentLimits,
     });
   }

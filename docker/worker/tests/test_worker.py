@@ -362,6 +362,17 @@ class Extracts(unittest.TestCase):
         self.assertIn("larger than this server allows", params[0])
         self.assertEqual(connection.statements_like("SET status = 'ready'"), [])
 
+    def test_no_extract_can_exceed_what_a_database_value_can_hold_even_with_no_file_limit(self):
+        original = worker.EXTRACT_MAX_BYTES
+        worker.EXTRACT_MAX_BYTES = 100
+        try:
+            connection = self.run_extract(self.Cutter(output=b"x" * 500), limits={"max_file_bytes": 10 ** 15})
+        finally:
+            worker.EXTRACT_MAX_BYTES = original
+        (sql, params), = connection.statements_like("SET status = 'failed'")
+        self.assertIn("larger than this server allows", params[0])
+        self.assertEqual(connection.statements_like("SET status = 'ready'"), [])
+
     def test_nothing_produced_fails_with_a_message(self):
         connection = self.run_extract(self.Cutter(output=None))
         self.assertEqual(len(connection.statements_like("SET status = 'failed'")), 1)

@@ -20,6 +20,7 @@ import {
   acceptFor,
   checkUpload,
   formatBytes,
+  isUnlimited,
   useCourseDocuments,
   useDeleteDocument,
   useDocumentLimits,
@@ -146,8 +147,9 @@ export function CourseMaterialsTab({ courseId }: CourseMaterialsTabProps) {
 
       {limits.enabled && (
         <p className="text-xs text-muted-foreground">
-          Using {formatBytes(usedBytes)} of {formatBytes(limits.maxUserBytes)} across all your courses. One file can be up to{" "}
-          {formatBytes(limits.maxFileBytes)}.
+          Using {formatBytes(usedBytes)}
+          {isUnlimited(limits.maxUserBytes) ? "" : ` of ${formatBytes(limits.maxUserBytes)}`} across all your courses.
+          {isUnlimited(limits.maxFileBytes) ? " There's no limit on the size of one file." : ` One file can be up to ${formatBytes(limits.maxFileBytes)}.`}
         </p>
       )}
 

@@ -203,6 +203,7 @@ export type Database = {
       document_limits: {
         Row: {
           enabled: boolean
+          max_documents: number
           max_file_bytes: number
           max_pages: number
           max_user_bytes: number
@@ -210,6 +211,7 @@ export type Database = {
         }
         Insert: {
           enabled?: boolean
+          max_documents?: number
           max_file_bytes?: number
           max_pages?: number
           max_user_bytes?: number
@@ -217,6 +219,7 @@ export type Database = {
         }
         Update: {
           enabled?: boolean
+          max_documents?: number
           max_file_bytes?: number
           max_pages?: number
           max_user_bytes?: number

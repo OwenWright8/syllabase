@@ -137,6 +137,11 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 - Assignments with type, due date/time, course, notes, and priority.
 - Archive completed assignments and whole courses at the end of a term.
 
+### 📎 Course materials
+- Upload each class's textbooks (PDF) and syllabus (PDF, Word or a photo) on the course's **Materials** tab. Scans and photos are read with OCR on your own server.
+- A textbook's chapters are found from its bookmarks or its printed contents page (you can correct, add or remove them), and each chapter downloads as its own small PDF, so you can grab "chapter 5" instead of the whole book. Any page range can be downloaded too.
+- Files are stored in your database and processed by a sandboxed background worker; per-user limits apply (see `DOCUMENT_*` settings).
+
 ### 🧪 Exams, Quizzes & Study Items
 - Track exams and quizzes per course.
 - Study items can link to a specific exam/quiz, with priority and status.

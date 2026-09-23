@@ -12,8 +12,9 @@ Environment: API_URL (default http://localhost:8080), ANON_KEY, ACCESS_TOKEN
 (user A), and optionally CI_USER_B_TOKEN; it signs up user B itself if not given.
 
 `--fixtures-only DIR` just writes the fixture files (to inspect them locally).
-Needs: reportlab, pillow (pip install reportlab pillow).
+Needs: reportlab, pillow, pypdf (pip install reportlab pillow pypdf).
 """
+import base64
 import io
 import json
 import os
@@ -77,6 +78,52 @@ def text_pdf(pages, encrypt_with=None, noise_bytes=0):
     return buffer.getvalue()
 
 
+BOOK_CHAPTERS = [(1, "Beginnings"), (2, "Middles"), (3, "Endings"), (4, "Aftermath")]
+
+
+def chapter_book(with_bookmarks):
+    """A 14-page book: cover, a printed contents page, then four chapters of three pages each.
+
+    Chapter n starts on PDF page 3 + 3(n-1), printed page 1 + 3(n-1): the printed numbers
+    lag the PDF's by 2, which is what the worker has to work out. Every page carries a
+    marker ("CH2-P3" = chapter 2, third page) so an extract's pages can be identified.
+    """
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer)
+
+    def line(y, text):
+        pdf.drawString(72, y, text)
+
+    line(780, "Introductory Chemistry, an example textbook for testing")
+    line(750, "Copyright and publisher information appears on this cover page.")
+    pdf.showPage()
+
+    line(780, "Contents")
+    for index, (number, title) in enumerate(BOOK_CHAPTERS):
+        line(740 - index * 24, f"Chapter {number}   {title} " + "." * 40 + f" {1 + 3 * index}")
+    line(740 - len(BOOK_CHAPTERS) * 24, "Index " + "." * 50 + " 13")
+    pdf.showPage()
+
+    for number, title in BOOK_CHAPTERS:
+        for page in range(1, 4):
+            if page == 1:
+                if with_bookmarks:
+                    key = f"ch{number}"
+                    pdf.bookmarkPage(key)
+                    pdf.addOutlineEntry(f"Chapter {number}: {title}", key, level=0)
+                line(780, f"Chapter {number}")
+                line(756, title)
+            else:
+                line(780, f"{title} (continued)")
+            line(700, f"CH{number}-P{page} ordinary body text so that this page has a real text layer.")
+            line(60, f"Page {(number - 1) * 3 + page}")
+            pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
+
+
 def scanned_pdf(lines):
     """A PDF whose only content is a picture of text: no text layer, so it needs OCR."""
     buffer = io.BytesIO()
@@ -105,6 +152,8 @@ def build_fixtures():
     return {
         "textbook": text_pdf(textbook_pages),
         "big_textbook": text_pdf(textbook_pages, noise_bytes=int(1.6 * MiB)),
+        "book_bookmarks": chapter_book(with_bookmarks=True),
+        "book_contents": chapter_book(with_bookmarks=False),
         "scanned_syllabus": scanned_pdf(["SYLLABUS", "Week 3 readings", "Read Chapter 5 due October 18"]),
         "photo_syllabus": png(["SYLLABUS PHOTO", "Week 4 readings", "Read Chapter 6 due October 25"]),
         "docx_syllabus": docx(["Week 5 Reading: Chapter 7 due 11/2", "Week 6 Reading: Chapter 8 due 11/9"]),
@@ -205,6 +254,45 @@ class Session:
             time.sleep(2)
         return self.document(doc_id)
 
+    def document_offset(self, doc_id):
+        status, rows = self.rest("GET", f"/course_documents?id=eq.{doc_id}&select=page_offset")
+        return rows[0]["page_offset"] if status == 200 and rows else None
+
+    def chapters(self, doc_id):
+        status, rows = self.rest("GET", f"/document_chapters?document_id=eq.{doc_id}&select=id,number,title,start_page,end_page,source&order=start_page")
+        return rows if status == 200 else []
+
+    def ask_for_pages(self, doc_id, start, end):
+        return self.rest(
+            "POST",
+            "/document_extracts?select=id,status,size_bytes",
+            body={"document_id": doc_id, "user_id": self.user_id, "start_page": start, "end_page": end},
+            prefer="return=representation",
+            accept="application/vnd.pgrst.object+json",
+        )
+
+    def extract_state(self, extract_id):
+        status, rows = self.rest("GET", f"/document_extracts?id=eq.{extract_id}&select=id,status,error,size_bytes")
+        return rows[0] if status == 200 and rows else None
+
+    def download_pages(self, doc_id, start, end, timeout=120):
+        """What the browser does: ask, wait, read back piece by piece. Returns (bytes, pieces, extract_id)."""
+        status, extract = self.ask_for_pages(doc_id, start, end)
+        assert status == 201, (status, extract)
+        deadline = time.time() + timeout
+        state = extract
+        while state and state["status"] not in ("ready", "failed") and time.time() < deadline:
+            time.sleep(1)
+            state = self.extract_state(extract["id"])
+        assert state and state["status"] == "ready", state
+        data, piece = b"", 0
+        while len(data) < state["size_bytes"]:
+            status, text = self.rest("POST", "/rpc/extract_piece", body={"p_extract": extract["id"], "p_piece": piece})
+            assert status == 200 and text, (status, text)
+            data += base64.b64decode(text)
+            piece += 1
+        return data, piece, extract["id"]
+
     def pages(self, doc_id):
         status, rows = self.rest("GET", f"/document_pages?document_id=eq.{doc_id}&select=page,text,ocr&order=page")
         return rows if status == 200 else []
@@ -219,6 +307,8 @@ def main():
                 handle.write(data)
         print("fixtures written to", target)
         return 0
+
+    from pypdf import PdfReader
 
     api = os.environ.get("API_URL", "http://localhost:8080")
     anon = os.environ["ANON_KEY"]
@@ -256,6 +346,7 @@ def main():
     check("stored as 2+ chunks numbered from 0", status == 200 and [c["seq"] for c in chunks] == list(range(len(chunks))) and len(chunks) >= 2, (status, chunks))
     result = a.wait(doc)
     check("and still becomes ready", result and result["status"] == "ready", result)
+    big_doc = doc
 
     print("== an image-only (scanned) PDF syllabus is OCR'd")
     doc = a.upload(course, "syllabus", "scanned.pdf", fixtures["scanned_syllabus"])
@@ -278,6 +369,143 @@ def main():
     check("becomes ready", result and result["status"] == "ready", result)
     joined = " ".join(p["text"] for p in a.pages(doc))
     check("paragraphs came through", "Chapter 7 due 11/2" in joined and "Chapter 8" in joined, joined[:200])
+
+    print("== a textbook with bookmarks: chapters come from them")
+    outline_book = a.upload(course, "textbook", "bookmarked.pdf", fixtures["book_bookmarks"])
+    result = a.wait(outline_book)
+    check("becomes ready with 14 pages", result and result["status"] == "ready" and result["page_count"] == 14, result)
+    found = a.chapters(outline_book)
+    check(
+        "the four chapters were found, with the right page ranges",
+        [(c["number"], c["start_page"], c["end_page"]) for c in found] == [(1, 3, 5), (2, 6, 8), (3, 9, 11), (4, 12, 14)],
+        found,
+    )
+    check("their titles were split from the numbering", [c["title"] for c in found] == [t for _, t in BOOK_CHAPTERS], found)
+    check("and they're marked as coming from the bookmarks", {c["source"] for c in found} == {"outline"}, found)
+    check("the offset was worked out from the contents page (PDF page = printed + 2)", (a.document_offset(outline_book)) == 2, a.document_offset(outline_book))
+
+    print("== a textbook with only a printed contents page: chapters come from that")
+    contents_book = a.upload(course, "textbook", "contents-only.pdf", fixtures["book_contents"])
+    result = a.wait(contents_book)
+    check("becomes ready", result and result["status"] == "ready" and result["page_count"] == 14, result)
+    found = a.chapters(contents_book)
+    check(
+        "chapters found with the printed page numbers converted to PDF pages",
+        [(c["number"], c["start_page"], c["end_page"]) for c in found] == [(1, 3, 5), (2, 6, 8), (3, 9, 11), (4, 12, 14)],
+        found,
+    )
+    check("marked as coming from the contents page", {c["source"] for c in found} == {"toc"}, found)
+    check("the offset is recorded (2)", a.document_offset(contents_book) == 2, a.document_offset(contents_book))
+    check("a book with no chapters at all (the plain text PDF) has none", a.chapters(text_doc) == [], a.chapters(text_doc))
+
+    print("== downloading only a chapter")
+    data, pieces, extract_id = a.download_pages(outline_book, 6, 8)
+    reader = PdfReader(io.BytesIO(data))
+    texts = [page.extract_text() for page in reader.pages]
+    check("the download is a PDF with exactly the 3 pages of chapter 2", len(texts) == 3, len(texts))
+    check("and they are chapter 2's pages, in order", all(f"CH2-P{i + 1}" in texts[i] for i in range(len(texts))), texts)
+    check("nothing from the neighbouring chapters", not any("CH1-" in t or "CH3-" in t for t in texts), texts)
+    check("the pages kept their real text (not re-rendered)", "ordinary body text" in texts[0], texts[0][:100])
+    status, again = a.ask_for_pages(outline_book, 6, 8)
+    check("asking again for the same pages is refused as a duplicate while one exists", status == 409, (status, again))
+    status, _ = a.rest("DELETE", f"/document_extracts?id=eq.{extract_id}")
+    check("the browser can delete its extract after collecting it", status in (200, 204) and a.extract_state(extract_id) is None, status)
+
+    data, pieces, extract_id = a.download_pages(contents_book, 12, 14)
+    texts = [page.extract_text() for page in PdfReader(io.BytesIO(data)).pages]
+    check("the last chapter (contents-only book) is right too", len(texts) == 3 and "CH4-P1" in texts[0] and "CH4-P3" in texts[2], texts)
+    a.rest("DELETE", f"/document_extracts?id=eq.{extract_id}")
+
+    data, pieces, extract_id = a.download_pages(big_doc, 1, 5)
+    check("a result bigger than one piece is read back in several", pieces >= 2, pieces)
+    reader = PdfReader(io.BytesIO(data))
+    check("and reassembles into a valid PDF with all 5 pages", len(reader.pages) == 5, len(reader.pages))
+    check("with the text of page 3 intact", "MARKER-THREE" in reader.pages[2].extract_text(), reader.pages[2].extract_text()[:100])
+    a.rest("DELETE", f"/document_extracts?id=eq.{extract_id}")
+
+    print("== the rules for chapters and page downloads")
+    status, body = a.ask_for_pages(outline_book, 10, 15)
+    check("pages past the end of the book are refused", status in (400, 403), (status, body))
+    status, body = a.ask_for_pages(outline_book, 9, 4)
+    check("a backwards range is refused", status in (400, 403), (status, body))
+    status, body = a.ask_for_pages(outline_book, 0, 4)
+    check("page 0 is refused", status in (400, 403), (status, body))
+    syllabus_id = a.upload(course, "syllabus", "syl-for-extract.docx", fixtures["docx_syllabus"])
+    a.wait(syllabus_id)
+    status, body = a.ask_for_pages(syllabus_id, 1, 1)
+    check("pages can't be requested from a syllabus", status in (400, 403), (status, body))
+    status, body = a.ask_for_pages("00000000-0000-4000-8000-00000000dead", 1, 2)
+    check("or from a document that doesn't exist", status in (400, 403), (status, body))
+    status, body = b.ask_for_pages(outline_book, 3, 5)
+    check("user B can't ask for pages of A's book", status in (400, 403), (status, body))
+    status, held = a.ask_for_pages(outline_book, 3, 5)
+    status_b, rows = b.rest("GET", "/document_extracts?select=id")
+    check("user B can't see A's extracts", status_b == 200 and rows == [], (status_b, rows))
+    status_b, piece = b.rest("POST", "/rpc/extract_piece", body={"p_extract": held["id"], "p_piece": 0})
+    check("user B can't read A's extract through extract_piece", status_b == 200 and not piece, (status_b, piece))
+    status_a, rows = a.rest("GET", f"/document_extracts?id=eq.{held['id']}&select=data")
+    check("even A can't SELECT the extract's data column (only the piece function)", status_a in (401, 403), (status_a, rows))
+    status_a, body = a.rest("PATCH", f"/document_extracts?id=eq.{held['id']}", body={"status": "ready"})
+    check("a user can't mark their own extract ready", status_a in (401, 403), (status_a, body))
+    check("anonymous callers can't use extract_piece", client.call("POST", "/rest/v1/rpc/extract_piece", body={"p_extract": held["id"], "p_piece": 0})[0] in (401, 403), "")
+    a.rest("DELETE", f"/document_extracts?id=eq.{held['id']}")
+
+    open_ids = []
+    for start in range(1, 12):
+        status, body = a.ask_for_pages(outline_book, start, start)
+        if status != 201:
+            break
+        open_ids.append(body["id"])
+    check("at most 10 downloads can be open at once", len(open_ids) == 10 and status in (400, 403), (len(open_ids), status, body))
+    for extract_id in open_ids:
+        a.rest("DELETE", f"/document_extracts?id=eq.{extract_id}")
+
+    status, mine = a.rest(
+        "POST",
+        "/document_chapters",
+        body={"document_id": outline_book, "user_id": a.user_id, "number": 9, "title": "Mine", "start_page": 1, "end_page": 2},
+        prefer="return=representation",
+    )
+    check("a user can add their own chapter", status == 201 and mine and mine[0]["source"] == "manual", (status, mine))
+    status, body = a.rest("POST", "/document_chapters", body={"document_id": outline_book, "user_id": a.user_id, "number": 10, "title": "Forged", "start_page": 1, "end_page": 2, "source": "outline"})
+    check("a user can't claim a chapter was detected (source isn't writable)", status in (401, 403), (status, body))
+    status, body = a.rest("POST", "/document_chapters", body={"document_id": outline_book, "user_id": a.user_id, "title": "Too far", "start_page": 5, "end_page": 15})
+    check("a chapter past the end of the book is refused", status in (400, 403), (status, body))
+    status, body = a.rest("POST", "/document_chapters", body={"document_id": outline_book, "user_id": a.user_id, "title": "Backwards", "start_page": 9, "end_page": 3})
+    check("a backwards chapter is refused", status in (400, 403), (status, body))
+    status, body = a.rest("POST", "/document_chapters", body={"document_id": syllabus_id, "user_id": a.user_id, "title": "On a syllabus", "start_page": 1, "end_page": 1})
+    check("chapters can't be added to a syllabus", status in (400, 403), (status, body))
+    status, body = b.rest("POST", "/document_chapters", body={"document_id": outline_book, "user_id": b.user_id, "title": "Sneaky", "start_page": 1, "end_page": 2})
+    check("user B can't add chapters to A's book", status in (400, 403), (status, body))
+    status, body = b.rest("POST", "/document_chapters", body={"document_id": outline_book, "user_id": a.user_id, "title": "Impersonated", "start_page": 1, "end_page": 2})
+    check("...nor by pretending to be A", status in (400, 401, 403), (status, body))
+    status, rows = b.rest("GET", f"/document_chapters?document_id=eq.{outline_book}&select=id")
+    check("user B can't see A's chapters", status == 200 and rows == [], (status, rows))
+    status, body = b.rest("PATCH", f"/document_chapters?id=eq.{mine[0]['id']}", body={"title": "Hijacked"})
+    check("B's edit of A's chapter changes nothing", [c["title"] for c in a.chapters(outline_book) if c["number"] == 9] == ["Mine"], (status, body))
+    status, body = b.rest("DELETE", f"/document_chapters?id=eq.{mine[0]['id']}")
+    check("B's delete of A's chapter changes nothing", any(c["number"] == 9 for c in a.chapters(outline_book)), (status, body))
+    status, body = a.rest("PATCH", f"/document_chapters?id=eq.{mine[0]['id']}", body={"document_id": contents_book})
+    check("a chapter can't be moved to another book", status in (401, 403), (status, body))
+    detected = [c for c in a.chapters(outline_book) if c["source"] == "outline"]
+    status, body = a.rest("PATCH", f"/document_chapters?id=eq.{detected[0]['id']}", body={"end_page": 4})
+    edited = [c for c in a.chapters(outline_book) if c["id"] == detected[0]["id"]][0]
+    check("correcting a detected chapter works and makes it the user's own", status in (200, 204) and edited["end_page"] == 4 and edited["source"] == "manual", (status, edited))
+    status, body = a.rest("DELETE", f"/document_chapters?id=eq.{mine[0]['id']}")
+    check("a user can delete a chapter", status in (200, 204) and not any(c["number"] == 9 for c in a.chapters(outline_book)), (status, body))
+
+    print("== the number of documents per user is bounded too")
+    tiny = []
+    refused = None
+    for i in range(210):
+        status, doc = a.start(course, "textbook", f"tiny-{i}.pdf", 1)
+        if status != 201:
+            refused = (i, status)
+            break
+        tiny.append(doc["id"])
+    status, existing = a.rest("GET", "/course_documents?select=id")
+    check("a user can't create documents without limit", refused is not None and len(existing) <= 200, (refused, len(existing)))
+    a.rest("DELETE", "/course_documents?id=in.(" + ",".join(tiny) + ")")
 
     print("== files that must be refused, with a message")
     doc = a.upload(course, "textbook", "locked.pdf", fixtures["encrypted"])
@@ -394,6 +622,7 @@ def main():
     status, _ = a.rest("DELETE", f"/courses?id=eq.{course}")
     status, left = a.rest("GET", "/course_documents?select=id")
     check("deleting the course removes its documents", status == 200 and left == [], (status, left))
+    check("...and their chapters", a.chapters(outline_book) == [] and a.chapters(contents_book) == [], "")
 
     print("== deleting an account removes everything it uploaded (and leaves the instance as it was)")
     doc_b_course = b.make_course("B's course")

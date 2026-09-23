@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { toTimeInputValue } from "@/lib/dateUtils";
 
 interface Course {
   id: string;
@@ -12,6 +13,7 @@ interface Course {
   short_code: string;
   color: string;
   semester: string | null;
+  class_time?: string | null;
 }
 
 interface EditCourseDialogProps {
@@ -27,6 +29,7 @@ export function EditCourseDialog({ course, open, onOpenChange, onSuccess }: Edit
     shortCode: "",
     color: "#3b82f6",
     semester: "",
+    classTime: "",
   });
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export function EditCourseDialog({ course, open, onOpenChange, onSuccess }: Edit
         shortCode: course.short_code,
         color: course.color,
         semester: course.semester || "",
+        classTime: toTimeInputValue(course.class_time),
       });
     }
   }, [course]);
@@ -51,6 +55,7 @@ export function EditCourseDialog({ course, open, onOpenChange, onSuccess }: Edit
         short_code: formData.shortCode,
         color: formData.color,
         semester: formData.semester || null,
+        class_time: formData.classTime || null,
       })
       .eq("id", course.id);
 
@@ -131,6 +136,20 @@ export function EditCourseDialog({ course, open, onOpenChange, onSuccess }: Edit
               onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
               placeholder="e.g. Fall 2025"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="classTime">Class time</Label>
+            <Input
+              id="classTime"
+              type="time"
+              value={formData.classTime}
+              onChange={(e) => setFormData({ ...formData, classTime: e.target.value })}
+             
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Optional. New assignments for this course are due at this time by default.
+            </p>
           </div>
 
           <div>

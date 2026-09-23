@@ -195,6 +195,24 @@ jobs:
           echo "$body"
           echo "$body" | grep -q '"hasAccounts":true'
 
+      # The class-time column (added by a migration) must exist, be writable under
+      # RLS by its owner, and come back the way the frontend expects: a Postgres
+      # `time` is returned as HH:MM:SS.
+      - name: A course's class time round-trips through the real database
+        run: |
+          api=http://localhost:8080/rest/v1
+          uid=$(python3 -c "import json;print(json.load(open('login.json'))['user']['id'])")
+          auth=(-H "apikey: ${CI_ANON_KEY}" -H "Authorization: Bearer ${CI_ACCESS_TOKEN}" -H "Content-Type: application/json")
+          created=$(curl -fsS -X POST "$api/courses" "${auth[@]}" -H "Prefer: return=representation" \
+            -d "{\"user_id\":\"${uid}\",\"name\":\"CI Course\",\"short_code\":\"CI 101\",\"color\":\"#3b82f6\",\"class_time\":\"10:30\"}")
+          echo "$created"
+          echo "$created" | grep -q '"class_time":"10:30:00"'
+          id=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])[0]['id'])" "$created")
+          # cleared with null
+          curl -fsS -X PATCH "$api/courses?id=eq.${id}" "${auth[@]}" -d '{"class_time":null}'
+          curl -fsS "$api/courses?id=eq.${id}&select=class_time" "${auth[@]}" | grep -q '"class_time":null'
+          curl -fsS -X DELETE "$api/courses?id=eq.${id}" "${auth[@]}"
+
       # Chrome/Edge send `Accept-Encoding: gzip, deflate, br, zstd`. With that
       # header the edge runtime accepted the request, ran the function, and
       # never delivered the response. nginx strips it on /functions/v1/ — keep

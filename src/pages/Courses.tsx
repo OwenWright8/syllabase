@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { formatTimeOfDay } from "@/lib/dateUtils";
 
 export default function Courses() {
   const navigate = useNavigate();
@@ -157,6 +158,11 @@ export default function Courses() {
                       {course.semester && (
                         <p className="text-xs text-muted-foreground/60">
                           {course.semester}
+                        </p>
+                      )}
+                      {course.class_time && (
+                        <p className="text-xs text-muted-foreground/60">
+                          Class at {formatTimeOfDay(course.class_time)}
                         </p>
                       )}
                     </div>

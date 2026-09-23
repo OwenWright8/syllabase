@@ -48,3 +48,17 @@ export function getTodayInTimezone(timezone: string): string {
   const now = nowInTimezone(timezone);
   return dateFnsFormat(now, 'yyyy-MM-dd');
 }
+
+/**
+ * Normalise a Postgres `time` ("10:30:00") or an <input type="time"> value
+ * ("10:30") to "HH:MM"; empty/absent gives "".
+ */
+export function toTimeInputValue(time: string | null | undefined): string {
+  return time ? time.slice(0, 5) : '';
+}
+
+/** "10:30" / "10:30:00" -> "10:30 AM" (a time of day, so no timezone conversion applies). */
+export function formatTimeOfDay(time: string): string {
+  const [hours, minutes] = time.split(':').map(Number);
+  return dateFnsFormat(new Date(2000, 0, 1, hours, minutes), 'h:mm a');
+}

@@ -23,6 +23,7 @@ const emptyForm = () => ({
   shortCode: "",
   color: colorOptions[0],
   semester: "",
+  classTime: "",
 });
 
 interface CreateCourseDialogProps {
@@ -45,6 +46,7 @@ export function CreateCourseDialog({ open, onOpenChange }: CreateCourseDialogPro
         short_code: formData.shortCode,
         color: formData.color,
         semester: formData.semester || null,
+        class_time: formData.classTime || null,
       });
       toast.success("Course created successfully");
       onOpenChange(false);
@@ -94,6 +96,20 @@ export function CreateCourseDialog({ open, onOpenChange }: CreateCourseDialogPro
               onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
               className="mt-1 rounded-xl"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="classTime">Class time</Label>
+            <Input
+              id="classTime"
+              type="time"
+              value={formData.classTime}
+              onChange={(e) => setFormData({ ...formData, classTime: e.target.value })}
+              className="mt-1 rounded-xl"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Optional. New assignments for this course are due at this time by default.
+            </p>
           </div>
 
           <div>

@@ -9,13 +9,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, addDays, parseISO } from "date-fns";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
-import { formatInTimezone, parseInTimezone, getTodayInTimezone } from "@/lib/dateUtils";
+import { formatInTimezone, parseInTimezone, getTodayInTimezone, toTimeInputValue } from "@/lib/dateUtils";
 
 interface Course {
   id: string;
   name: string;
   short_code: string;
+  /** When the class meets ("HH:MM[:SS]"); new assignments for it default to being due then. */
+  class_time?: string | null;
 }
+
+// Due time of a new assignment when its course has no class time.
+const DEFAULT_DUE_TIME = "23:59";
 
 interface Task {
   id: string;
@@ -47,13 +52,17 @@ export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess, d
     courseId: "none",
     type: "homework",
     dueDate: "",
-    dueTime: "23:59",
+    dueTime: DEFAULT_DUE_TIME,
     workDate: "",
     estimatedMinutes: "60",
     priority: "medium",
   });
+  // Once the user has typed a due time it is theirs: choosing a course must
+  // not overwrite it. (Reset whenever the form is re-initialised below.)
+  const [dueTimeEdited, setDueTimeEdited] = useState(false);
 
   useEffect(() => {
+    setDueTimeEdited(false);
     if (task) {
       setFormData({
         title: task.title,
@@ -80,13 +89,28 @@ export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess, d
         courseId: "none",
         type: "homework",
         dueDate: defaultDue,
-        dueTime: "23:59",
+        dueTime: DEFAULT_DUE_TIME,
         workDate: "",
         estimatedMinutes: "60",
         priority: "medium",
       });
     }
   }, [task, open, timezone, defaultDate]);
+
+  // For a NEW assignment, choosing a course with a class time makes it due when
+  // that class starts (choosing one without goes back to the usual default),
+  // unless the user has already set the time themselves. Existing tasks keep
+  // whatever time they have.
+  const handleCourseChange = (courseId: string) => {
+    setFormData((prev) => {
+      const next = { ...prev, courseId };
+      if (!task && !dueTimeEdited) {
+        const classTime = courses.find((c) => c.id === courseId)?.class_time;
+        next.dueTime = toTimeInputValue(classTime) || DEFAULT_DUE_TIME;
+      }
+      return next;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,7 +216,7 @@ export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess, d
 
             <div>
               <Label htmlFor="course">Course</Label>
-              <Select value={formData.courseId} onValueChange={(v) => setFormData({ ...formData, courseId: v })}>
+              <Select value={formData.courseId} onValueChange={handleCourseChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select course" />
                 </SelectTrigger>
@@ -241,7 +265,10 @@ export function EditTaskDialog({ task, courses, open, onOpenChange, onSuccess, d
                 id="dueTime"
                 type="time"
                 value={formData.dueTime}
-                onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                onChange={(e) => {
+                  setDueTimeEdited(true);
+                  setFormData({ ...formData, dueTime: e.target.value });
+                }}
                 required
               />
             </div>

@@ -36,6 +36,8 @@ const TABLES = [
   "course_document_chunks",
   "document_pages",
   "document_limits",
+  "document_chapters",
+  "document_extracts",
 ] as const;
 export type Table = (typeof TABLES)[number];
 
@@ -57,6 +59,7 @@ export interface FakeBackendOptions {
   courses?: Row[];
   tasks?: Row[];
   documents?: Row[];
+  chapters?: Row[];
   /** Override the upload limits (same names as the document_limits columns). */
   documentLimits?: Partial<{ enabled: boolean; max_file_bytes: number; max_user_bytes: number; max_pages: number }>;
   /** Origin the app is loaded from (default: APP_ORIGIN). */
@@ -65,6 +68,12 @@ export interface FakeBackendOptions {
 
 /** What the fake "worker" does with a document once it is queued. */
 export type WorkerOutcome = { status: "ready"; page_count: number } | { status: "failed"; error: string };
+
+/** What the fake worker does with a requested page range. */
+export type ExtractOutcome = { status: "ready"; bytes: Buffer } | { status: "failed"; error: string };
+
+/** One piece of an extract, in bytes: what extract_piece() returns per call (see the migration). */
+export const PIECE_BYTES = 786432;
 
 export class FakeBackend {
   readonly db: Record<Table, Row[]>;
@@ -82,6 +91,14 @@ export class FakeBackend {
   workerOutcome: (doc: Row) => WorkerOutcome = () => ({ status: "ready", page_count: 12 });
   /** Answer the chunk with this sequence number with a 500 (upload dies part-way). */
   failChunkAt: number | null = null;
+  /** Decide what each requested page range turns into (default: a small PDF-looking file). */
+  extractOutcome: (extract: Row) => ExtractOutcome = (extract) => ({
+    status: "ready",
+    bytes: Buffer.from(`%PDF-1.7 fake extract of pages ${extract.start_page}-${extract.end_page}`),
+  });
+  /** How many extract_piece() calls have been answered. */
+  pieceRequests = 0;
+  private readonly extractData = new Map<string, Buffer>();
   private readonly hasAccounts: boolean;
 
   constructor(options: FakeBackendOptions) {
@@ -98,6 +115,7 @@ export class FakeBackend {
     this.db.courses.push(...(options.courses ?? []));
     this.db.tasks.push(...(options.tasks ?? []));
     this.db.course_documents.push(...(options.documents ?? []));
+    this.db.document_chapters.push(...(options.chapters ?? []));
     this.db.document_limits.push({
       id: "limits",
       singleton: true,
@@ -183,6 +201,53 @@ export class FakeBackend {
     return null;
   }
 
+  /** The chapter trigger: the user's own read textbook, a range inside it, always recorded as manual, at most 500. */
+  private checkChapter(item: Record<string, unknown>, existing?: Row) {
+    const bad = (message: string) => ({ status: 400, body: { code: "23514", message, details: null, hint: null } });
+    const doc = this.db.course_documents.find((d) => d.id === (item.document_id ?? existing?.document_id));
+    if (!doc || doc.kind !== "textbook") return bad("Chapters can only be added to one of your own textbooks.");
+    if (doc.status !== "ready") return bad("That textbook has not been read yet.");
+    const start = Number(item.start_page ?? existing?.start_page);
+    const end = Number(item.end_page ?? existing?.end_page);
+    if (!(start >= 1) || end < start) return bad("new row violates check constraint");
+    if (end > Number(doc.page_count)) return bad(`That range ends after the last page (the book has ${doc.page_count} pages).`);
+    if (!existing && this.db.document_chapters.filter((c) => c.document_id === doc.id).length >= 500) return bad("A book can have at most 500 chapters.");
+    return null;
+  }
+
+  /** The extract trigger + unique constraint: own read textbook, a real range, uploads on, at most 10 open, no duplicates. */
+  private checkExtract(item: Record<string, unknown>) {
+    const bad = (message: string, code = "23514") => ({ status: code === "23505" ? 409 : 400, body: { code, message, details: null, hint: null } });
+    const doc = this.db.course_documents.find((d) => d.id === item.document_id);
+    if (!doc || doc.kind !== "textbook" || doc.status !== "ready") return bad("Pages can only be taken from one of your own textbooks that has been read.");
+    if (Number(item.end_page) < Number(item.start_page) || Number(item.start_page) < 1) return bad("new row violates check constraint");
+    if (Number(item.end_page) > Number(doc.page_count)) return bad(`That range ends after the last page (the book has ${doc.page_count} pages).`);
+    if (!this.limits.enabled) return bad("Course materials are switched off on this server.");
+    if (this.db.document_extracts.length >= 10) return bad("Too many downloads are being prepared at once. Wait for one to finish.");
+    if (this.db.document_extracts.some((e) => e.document_id === item.document_id && e.start_page === item.start_page && e.end_page === item.end_page)) {
+      return bad("duplicate key value violates unique constraint", "23505");
+    }
+    return null;
+  }
+
+  /** Stand-in for the worker's extract job: pending -> processing -> ready/failed. */
+  private simulateExtract(extract: Row) {
+    setTimeout(() => {
+      if (!this.db.document_extracts.includes(extract)) return;
+      extract.status = "processing";
+      setTimeout(() => {
+        if (!this.db.document_extracts.includes(extract)) return;
+        const outcome = this.extractOutcome(extract);
+        if (outcome.status === "ready") {
+          this.extractData.set(String(extract.id), outcome.bytes);
+          Object.assign(extract, { status: "ready", size_bytes: outcome.bytes.length });
+        } else {
+          Object.assign(extract, { status: "failed", error: outcome.error });
+        }
+      }, this.workerDelayMs);
+    }, this.workerDelayMs);
+  }
+
   /** Stand-in for the worker: queued -> processing -> ready/failed. */
   private simulateWorker(doc: Row) {
     setTimeout(() => {
@@ -211,6 +276,16 @@ export class FakeBackend {
     }
     if (url.pathname === "/functions/v1/instance-status") return json(200, { hasAccounts: this.hasAccounts });
 
+    if (url.pathname === "/rest/v1/rpc/extract_piece" && method === "POST") {
+      this.pieceRequests++;
+      const args = JSON.parse(request.postData() ?? "{}") as { p_extract?: string; p_piece?: number };
+      const extract = this.db.document_extracts.find((e) => e.id === args.p_extract);
+      const bytes = extract?.status === "ready" ? this.extractData.get(String(extract.id)) : undefined;
+      const piece = Number(args.p_piece);
+      if (!bytes || !(piece >= 0)) return json(200, null);
+      return json(200, bytes.subarray(piece * PIECE_BYTES, (piece + 1) * PIECE_BYTES).toString("base64"));
+    }
+
     const match = url.pathname.match(/^\/rest\/v1\/([a-z_]+)$/);
     const table = match?.[1] as Table | undefined;
     if (!table || !(table in this.db)) return json(200, []);
@@ -220,7 +295,7 @@ export class FakeBackend {
       // The fake mostly ignores filters, but equality on these ids matters to how
       // the app scopes documents (per course, per document).
       let source = this.db[table];
-      for (const column of ["course_id", "document_id", "id"]) {
+      for (const column of ["course_id", "document_id", "id", "start_page", "end_page"]) {
         const wanted = url.searchParams.get(column);
         if (wanted?.startsWith("eq.")) source = source.filter((r) => !(column in r) || String(r[column]) === wanted.slice(3));
       }
@@ -234,8 +309,15 @@ export class FakeBackend {
     if (method === "POST") {
       const body = JSON.parse(request.postData() ?? "[]") as Record<string, unknown> | Record<string, unknown>[];
       const items = Array.isArray(body) ? body : [body];
-      if (table === "course_documents" || table === "course_document_chunks") {
-        const refusal = table === "course_documents" ? this.checkNewDocument(items[0]) : this.checkChunk(items[0]);
+      if (table === "course_documents" || table === "course_document_chunks" || table === "document_chapters" || table === "document_extracts") {
+        const refusal =
+          table === "course_documents"
+            ? this.checkNewDocument(items[0])
+            : table === "course_document_chunks"
+              ? this.checkChunk(items[0])
+              : table === "document_chapters"
+                ? this.checkChapter(items[0])
+                : this.checkExtract(items[0]);
         if (refusal) return json(refusal.status, refusal.body);
       }
       const stored = items.map((item): Row => ({
@@ -245,7 +327,10 @@ export class FakeBackend {
         status: "not_started",
         completed_at: null,
         ...(table === "course_documents" ? { status: "uploading", uploaded_bytes: 0, progress: 0, error: null, page_count: null, page_offset: 0 } : {}),
+        ...(table === "document_extracts" ? { status: "pending", error: null, size_bytes: null } : {}),
         ...item,
+        // whatever a signed-in user sends, the database records their chapters as manual
+        ...(table === "document_chapters" ? { source: "manual" } : {}),
       }));
       if (table === "course_document_chunks") {
         // keep only what the checks need (the bytes themselves would just fill memory)
@@ -256,6 +341,7 @@ export class FakeBackend {
         }
       }
       this.db[table].push(...stored);
+      if (table === "document_extracts") this.simulateExtract(stored[0]);
       this.writes.push({ table, method, body: items });
       const wantsBody = (request.headers()["prefer"] ?? "").includes("return=representation");
       // Like PostgREST: a single object when the client asked for one (supabase-js .single()), else an array.
@@ -277,6 +363,12 @@ export class FakeBackend {
         if (refusal) return json(400, refusal);
         this.simulateWorker(row);
       }
+      if (row && table === "document_chapters") {
+        const refusal = this.checkChapter(patch, row);
+        if (refusal) return json(refusal.status, refusal.body);
+        Object.assign(row, patch, { source: "manual" }); // recorded as the user's own, whatever they send
+        return route.fulfill({ status: 204, headers: cors });
+      }
       if (row) Object.assign(row, patch);
       return route.fulfill({ status: 204, headers: cors });
     }
@@ -289,6 +381,8 @@ export class FakeBackend {
         // ON DELETE CASCADE
         this.db.course_document_chunks = this.db.course_document_chunks.filter((c) => c.document_id !== id);
         this.db.document_pages = this.db.document_pages.filter((p) => p.document_id !== id);
+        this.db.document_chapters = this.db.document_chapters.filter((c) => c.document_id !== id);
+        this.db.document_extracts = this.db.document_extracts.filter((e) => e.document_id !== id);
       }
       return route.fulfill({ status: 204, headers: cors });
     }

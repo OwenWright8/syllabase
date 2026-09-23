@@ -9,6 +9,8 @@ export interface Course {
   color: string;
   semester: string | null;
   is_archived: boolean;
+  /** When the class meets, "HH:MM:SS" wall-clock in the user's timezone; null if not set. */
+  class_time: string | null;
 }
 
 export const courseKeys = {
@@ -62,6 +64,8 @@ export interface NewCourse {
   short_code: string;
   color: string;
   semester: string | null;
+  /** "HH:MM" wall-clock time, or null. */
+  class_time?: string | null;
 }
 
 export function useCreateCourse() {

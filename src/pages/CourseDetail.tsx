@@ -15,6 +15,7 @@ import { ReadingsList } from "@/components/readings/ReadingsList";
 import { CreateReadingDialog } from "@/components/readings/CreateReadingDialog";
 import { CourseExamsTab } from "@/components/course/CourseExamsTab";
 import { CourseStatsTab } from "@/components/course/CourseStatsTab";
+import { formatTimeOfDay } from "@/lib/dateUtils";
 
 export default function CourseDetail() {
   const { id } = useParams<{ id: string }>();
@@ -101,9 +102,9 @@ export default function CourseDetail() {
                 </span>
               )}
             </div>
-            {course.semester && (
+            {(course.semester || course.class_time) && (
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                {course.semester}
+                {[course.semester, course.class_time && `Class at ${formatTimeOfDay(course.class_time)}`].filter(Boolean).join(" · ")}
               </p>
             )}
           </div>

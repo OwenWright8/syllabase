@@ -24,7 +24,6 @@ export interface DocumentLimits {
   enabled: boolean;
   maxFileBytes: number;
   maxUserBytes: number;
-  maxPages: number;
 }
 
 /** The server stores "unlimited" as a number too large to ever apply (1 PB); anything at or above this means no limit. */
@@ -70,7 +69,6 @@ export function useDocumentLimits() {
         enabled: data.enabled,
         maxFileBytes: data.max_file_bytes,
         maxUserBytes: data.max_user_bytes,
-        maxPages: data.max_pages,
       };
     },
     staleTime: 5 * 60 * 1000,

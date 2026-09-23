@@ -26,7 +26,9 @@ import {
 import { cn } from "@/lib/utils";
 import { format, parseISO, isToday, isPast, isTomorrow } from "date-fns";
 import { usePageDownloads } from "@/hooks/usePageDownloads";
+import { useReadingBooks } from "@/hooks/useReadingBooks";
 import { downloadFilename } from "@/lib/documentPages";
+import { matchReadingText } from "@/lib/syllabus";
 
 interface ReadingCardProps {
   reading: Reading;
@@ -67,18 +69,36 @@ export function ReadingCard({
   const StatusIcon = status.icon;
   const downloads = usePageDownloads();
 
-  // A reading linked to a textbook range can hand over just those pages.
-  const range =
-    !reading.isTask && reading.document_id && reading.start_page != null && reading.end_page != null
-      ? {
-          documentId: reading.document_id,
-          start: reading.start_page,
-          end: reading.end_page,
-          filename: downloadFilename(reading.document?.filename ?? "Textbook", reading.title, reading.start_page, reading.end_page),
-        }
-      : null;
+  const { booksByCourse } = useReadingBooks();
+
+  // Which pages of a textbook this reading is. A reading added from a syllabus
+  // carries the exact range. Any other (typed by hand, or a reading task) is
+  // matched from its wording ("Read Chapter 5") against the course's textbooks
+  // that have been read by the server, so it can offer the same download.
+  const range = (() => {
+    if (reading.document_id && reading.start_page != null && reading.end_page != null && !reading.isTask) {
+      return {
+        documentId: reading.document_id,
+        start: reading.start_page,
+        end: reading.end_page,
+        filename: downloadFilename(reading.document?.filename ?? "Textbook", reading.title, reading.start_page, reading.end_page),
+        label: reading.pages || "pages",
+      };
+    }
+    const books = booksByCourse.get(reading.course_id) ?? [];
+    const match = matchReadingText(`${reading.title} ${reading.pages ?? ""}`, books);
+    if (!match) return null;
+    const book = books.find((b) => b.id === match.bookId);
+    return {
+      documentId: match.bookId,
+      start: match.start,
+      end: match.end,
+      filename: downloadFilename(book?.filename ?? "Textbook", reading.title, match.start, match.end),
+      label: match.pages,
+    };
+  })();
   const downloading = range ? downloads.isBusy(range) : false;
-  const downloadLabel = `Download ${reading.pages || "pages"}`;
+  const downloadLabel = `Download ${range?.label ?? "pages"}`;
 
   const getDueDateLabel = () => {
     if (!reading.due_date) return null;

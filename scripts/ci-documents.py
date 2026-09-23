@@ -533,6 +533,7 @@ def main():
     check("user B sees none of A's readings", status == 200 and rows == [], (status, rows))
     a.rest("DELETE", f"/readings?id=eq.{made[0]['id']}")
     a.rest("DELETE", f"/readings?id=eq.{linked_reading}")
+    b.rest("DELETE", f"/course_documents?id=eq.{b_doc['id']}")   # (B's own document, made only for the checks above)
 
     print("== the number of documents per user is bounded too")
     tiny = []

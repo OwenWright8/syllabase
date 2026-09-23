@@ -43,6 +43,11 @@ fi
 # only have to be valid URLs, and the token issuer isn't validated.)
 GOTRUE_PLACEHOLDER_URL="http://localhost:9999"
 
+# Course-materials settings (uploads on/off, size and page limits): validated
+# here so a typo stops the container with a clear message.
+. /app/documents.sh
+documents_settings
+
 # `docker restart` keeps the container filesystem, so clear the marker the
 # watchdog below leaves behind when a backend dies.
 rm -f /tmp/backend-died
@@ -55,6 +60,9 @@ DB_URL="postgres://postgres:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres
 # instead caused GoTrue's own migrations to fail against this image.
 GOTRUE_DB_URL="postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
 POSTGREST_DB_URL="postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
+# supabase_admin is the image's real superuser (POSTGRES_USER, with
+# POSTGRES_PASSWORD as its password, reachable over the compose network).
+ADMIN_DB_URL="postgres://supabase_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
 
 echo "[start] waiting for postgres..."
 until pg_isready -h db -p 5432 -U postgres >/dev/null 2>&1; do
@@ -62,8 +70,37 @@ until pg_isready -h db -p 5432 -U postgres >/dev/null 2>&1; do
 done
 echo "[start] postgres is ready"
 
+echo "[start] preparing the document worker's database role..."
+# The worker (which parses untrusted uploads) connects as its own restricted
+# role, `syllabase_worker`, whose only rights are on the document tables (granted
+# by a migration). The role must exist BEFORE the migrations run, and creating
+# one needs a superuser. Its password is random and new on every boot: it lives
+# only in this shell and the worker's environment, never on disk, so there is
+# nothing to persist, back up or leak.
+WORKER_DB_PASSWORD=$(openssl rand -hex 32)
+psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -v worker_pw="$WORKER_DB_PASSWORD" <<'SQLEOF'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'syllabase_worker') THEN
+    CREATE ROLE syllabase_worker LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE;
+  END IF;
+END $$;
+ALTER ROLE syllabase_worker WITH LOGIN PASSWORD :'worker_pw';
+SQLEOF
+
 echo "[start] applying migrations..."
 DATABASE_URL="$DB_URL" MIGRATIONS_DIR="/app/migrations" /app/migrate.sh
+
+echo "[start] applying document limits (uploads $DOC_ENABLED)..."
+psql "$DB_URL" -v ON_ERROR_STOP=1 \
+  -v enabled="$DOC_ENABLED" -v max_file="$DOC_MAX_FILE_BYTES" \
+  -v max_user="$DOC_USER_QUOTA_BYTES" -v max_pages="$DOC_MAX_PAGES" <<'SQLEOF'
+UPDATE public.document_limits
+   SET enabled = :'enabled'::boolean,
+       max_file_bytes = :max_file,
+       max_user_bytes = :max_user,
+       max_pages = :max_pages;
+SQLEOF
 
 echo "[start] scheduling notification sweep..."
 # (Re)created fresh on every boot with the current CRON_SECRET baked
@@ -118,7 +155,6 @@ echo "[start] checking auth schema ownership..."
 # POSTGRES_PASSWORD as its password, reachable over the compose network).
 # Prints the owners before changing anything so the logs show whether the
 # repair was actually needed.
-ADMIN_DB_URL="postgres://supabase_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
 psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 <<'SQLEOF'
 SELECT 'auth function owner before repair: ' || p.oid::regprocedure::text || ' -> ' || pg_get_userbyid(p.proowner) AS info
 FROM pg_proc p
@@ -185,9 +221,35 @@ SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
   /usr/local/bin/edge-runtime start --main-service /app/functions/main &
 EDGE_PID=$!
 
+WORKER_SUPERVISOR_PID=""
+if [ "$DOC_ENABLED" = true ]; then
+  echo "[start] starting document worker..."
+  # Runs as its own unprivileged user with no way to gain privileges, no
+  # secrets in its environment (it gets only its own database URL), and a scratch
+  # directory nobody else can read. It is restarted if it ever exits, but does
+  # not take the app down with it: documents are optional, sign-in isn't.
+  WORKER_UID=$(id -u syllabase-worker)
+  WORKER_GID=$(id -g syllabase-worker)
+  WORKER_DATABASE_URL="postgres://syllabase_worker:${WORKER_DB_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}"
+  (
+    while :; do
+      env -u POSTGRES_PASSWORD -u JWT_SECRET -u SERVICE_ROLE_KEY -u ANON_KEY -u CRON_SECRET \
+        WORKER_DATABASE_URL="$WORKER_DATABASE_URL" \
+        WORKER_TMPDIR=/var/lib/syllabase-worker/tmp \
+        HOME=/var/lib/syllabase-worker \
+        setpriv --reuid="$WORKER_UID" --regid="$WORKER_GID" --clear-groups --no-new-privs \
+        python3 /app/worker/worker.py || echo "[start] document worker exited; restarting in 5s" >&2
+      sleep 5
+    done
+  ) &
+  WORKER_SUPERVISOR_PID=$!
+else
+  echo "[start] document uploads are switched off (DOCUMENTS=off): not starting the worker"
+fi
+
 cleanup() {
   echo "[start] shutting down..."
-  kill "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" 2>/dev/null || true
+  kill "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" ${WORKER_SUPERVISOR_PID:+"$WORKER_SUPERVISOR_PID"} 2>/dev/null || true
   wait "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" 2>/dev/null || true
 }
 trap cleanup TERM INT

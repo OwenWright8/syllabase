@@ -14,44 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
-      awards: {
+      course_document_chunks: {
         Row: {
-          attachment_url: string | null
-          created_at: string | null
-          date: string
-          description: string | null
-          id: string
-          organization: string | null
-          tags: string[] | null
-          title: string
-          type: string
-          updated_at: string | null
+          data: string
+          document_id: string
+          seq: number
           user_id: string
         }
         Insert: {
-          attachment_url?: string | null
-          created_at?: string | null
-          date: string
-          description?: string | null
-          id?: string
-          organization?: string | null
-          tags?: string[] | null
-          title: string
-          type: string
-          updated_at?: string | null
+          data: string
+          document_id: string
+          seq: number
           user_id: string
         }
         Update: {
-          attachment_url?: string | null
-          created_at?: string | null
-          date?: string
-          description?: string | null
+          data?: string
+          document_id?: string
+          seq?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      course_documents: {
+        Row: {
+          course_id: string
+          created_at: string
+          error: string | null
+          filename: string
+          id: string
+          kind: string
+          mime_type: string | null
+          page_count: number | null
+          page_offset: number
+          progress: number
+          size_bytes: number
+          status: string
+          updated_at: string
+          uploaded_bytes: number
+          user_id: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          error?: string | null
+          filename: string
           id?: string
-          organization?: string | null
-          tags?: string[] | null
-          title?: string
-          type?: string
-          updated_at?: string | null
+          kind: string
+          mime_type?: string | null
+          page_count?: number | null
+          page_offset?: number
+          progress?: number
+          size_bytes: number
+          status?: string
+          updated_at?: string
+          uploaded_bytes?: number
+          user_id: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          error?: string | null
+          filename?: string
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          page_count?: number | null
+          page_offset?: number
+          progress?: number
+          size_bytes?: number
+          status?: string
+          updated_at?: string
+          uploaded_bytes?: number
           user_id?: string
         }
         Relationships: []
@@ -88,6 +121,54 @@ export type Database = {
           name?: string
           semester?: string | null
           short_code?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      document_limits: {
+        Row: {
+          enabled: boolean
+          max_file_bytes: number
+          max_pages: number
+          max_user_bytes: number
+          singleton: boolean
+        }
+        Insert: {
+          enabled?: boolean
+          max_file_bytes?: number
+          max_pages?: number
+          max_user_bytes?: number
+          singleton?: boolean
+        }
+        Update: {
+          enabled?: boolean
+          max_file_bytes?: number
+          max_pages?: number
+          max_user_bytes?: number
+          singleton?: boolean
+        }
+        Relationships: []
+      }
+      document_pages: {
+        Row: {
+          document_id: string
+          ocr: boolean
+          page: number
+          text: string
+          user_id: string
+        }
+        Insert: {
+          document_id: string
+          ocr?: boolean
+          page: number
+          text?: string
+          user_id: string
+        }
+        Update: {
+          document_id?: string
+          ocr?: boolean
+          page?: number
+          text?: string
           user_id?: string
         }
         Relationships: []
@@ -132,251 +213,6 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      goals: {
-        Row: {
-          category: string
-          created_at: string | null
-          id: string
-          target: number
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          category: string
-          created_at?: string | null
-          id?: string
-          target?: number
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          category?: string
-          created_at?: string | null
-          id?: string
-          target?: number
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
-      hour_entries: {
-        Row: {
-          attachment_url: string | null
-          category: string
-          clinical_procedures: string | null
-          created_at: string | null
-          date: string
-          doctor_email: string | null
-          doctor_name: string | null
-          doctor_phone: string | null
-          end_time: string
-          hours: number
-          id: string
-          location: string | null
-          notable: boolean | null
-          reflection: string | null
-          specialty: string | null
-          start_time: string
-          supervisor: string | null
-          surgical_procedures: string | null
-          tags: string[] | null
-          title: string
-          updated_at: string | null
-          user_id: string
-          verified: boolean | null
-        }
-        Insert: {
-          attachment_url?: string | null
-          category: string
-          clinical_procedures?: string | null
-          created_at?: string | null
-          date: string
-          doctor_email?: string | null
-          doctor_name?: string | null
-          doctor_phone?: string | null
-          end_time: string
-          hours: number
-          id?: string
-          location?: string | null
-          notable?: boolean | null
-          reflection?: string | null
-          specialty?: string | null
-          start_time: string
-          supervisor?: string | null
-          surgical_procedures?: string | null
-          tags?: string[] | null
-          title: string
-          updated_at?: string | null
-          user_id: string
-          verified?: boolean | null
-        }
-        Update: {
-          attachment_url?: string | null
-          category?: string
-          clinical_procedures?: string | null
-          created_at?: string | null
-          date?: string
-          doctor_email?: string | null
-          doctor_name?: string | null
-          doctor_phone?: string | null
-          end_time?: string
-          hours?: number
-          id?: string
-          location?: string | null
-          notable?: boolean | null
-          reflection?: string | null
-          specialty?: string | null
-          start_time?: string
-          supervisor?: string | null
-          surgical_procedures?: string | null
-          tags?: string[] | null
-          title?: string
-          updated_at?: string | null
-          user_id?: string
-          verified?: boolean | null
-        }
-        Relationships: []
-      }
-      image_config: {
-        Row: {
-          category: string
-          created_at: string
-          file_name: string
-          id: string
-          is_featured: boolean
-          is_hero: boolean
-          media_type: string
-          orientation: string
-          updated_at: string
-        }
-        Insert: {
-          category?: string
-          created_at?: string
-          file_name: string
-          id?: string
-          is_featured?: boolean
-          is_hero?: boolean
-          media_type?: string
-          orientation?: string
-          updated_at?: string
-        }
-        Update: {
-          category?: string
-          created_at?: string
-          file_name?: string
-          id?: string
-          is_featured?: boolean
-          is_hero?: boolean
-          media_type?: string
-          orientation?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      portfolio_projects: {
-        Row: {
-          approach: string[] | null
-          category: string | null
-          client: string | null
-          created_at: string | null
-          demo_url: string | null
-          description: string | null
-          display_order: number | null
-          external_url: string | null
-          featured: boolean | null
-          id: string
-          problem: string | null
-          solution: string | null
-          thumbnail_url: string | null
-          title: string
-          updated_at: string | null
-          year: string | null
-        }
-        Insert: {
-          approach?: string[] | null
-          category?: string | null
-          client?: string | null
-          created_at?: string | null
-          demo_url?: string | null
-          description?: string | null
-          display_order?: number | null
-          external_url?: string | null
-          featured?: boolean | null
-          id?: string
-          problem?: string | null
-          solution?: string | null
-          thumbnail_url?: string | null
-          title: string
-          updated_at?: string | null
-          year?: string | null
-        }
-        Update: {
-          approach?: string[] | null
-          category?: string | null
-          client?: string | null
-          created_at?: string | null
-          demo_url?: string | null
-          description?: string | null
-          display_order?: number | null
-          external_url?: string | null
-          featured?: boolean | null
-          id?: string
-          problem?: string | null
-          solution?: string | null
-          thumbnail_url?: string | null
-          title?: string
-          updated_at?: string | null
-          year?: string | null
-        }
-        Relationships: []
-      }
-      premed_courses: {
-        Row: {
-          code: string
-          color: string | null
-          created_at: string | null
-          credits: number | null
-          id: string
-          meeting_times: Json | null
-          name: string
-          semester_id: string | null
-          type_tag: string | null
-          user_id: string
-        }
-        Insert: {
-          code: string
-          color?: string | null
-          created_at?: string | null
-          credits?: number | null
-          id?: string
-          meeting_times?: Json | null
-          name: string
-          semester_id?: string | null
-          type_tag?: string | null
-          user_id: string
-        }
-        Update: {
-          code?: string
-          color?: string | null
-          created_at?: string | null
-          credits?: number | null
-          id?: string
-          meeting_times?: Json | null
-          name?: string
-          semester_id?: string | null
-          type_tag?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "premed_courses_semester_id_fkey"
-            columns: ["semester_id"]
-            isOneToOne: false
-            referencedRelation: "semesters"
             referencedColumns: ["id"]
           },
         ]
@@ -602,132 +438,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      schedule_blocks: {
-        Row: {
-          color: string | null
-          course_id: string | null
-          created_at: string | null
-          day: string
-          end_time: string
-          id: string
-          label: string
-          semester_id: string | null
-          source: string | null
-          start_time: string
-          user_id: string
-        }
-        Insert: {
-          color?: string | null
-          course_id?: string | null
-          created_at?: string | null
-          day: string
-          end_time: string
-          id?: string
-          label: string
-          semester_id?: string | null
-          source?: string | null
-          start_time: string
-          user_id: string
-        }
-        Update: {
-          color?: string | null
-          course_id?: string | null
-          created_at?: string | null
-          day?: string
-          end_time?: string
-          id?: string
-          label?: string
-          semester_id?: string | null
-          source?: string | null
-          start_time?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "schedule_blocks_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "premed_courses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "schedule_blocks_semester_id_fkey"
-            columns: ["semester_id"]
-            isOneToOne: false
-            referencedRelation: "semesters"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      semesters: {
-        Row: {
-          created_at: string | null
-          end_date: string
-          id: string
-          name: string
-          notes: string | null
-          start_date: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          end_date: string
-          id?: string
-          name: string
-          notes?: string | null
-          start_date: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          end_date?: string
-          id?: string
-          name?: string
-          notes?: string | null
-          start_date?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      shadowing_wishlist: {
-        Row: {
-          created_at: string
-          doctor_name: string | null
-          id: string
-          location: string | null
-          notes: string | null
-          priority: string | null
-          specialty: string
-          status: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          doctor_name?: string | null
-          id?: string
-          location?: string | null
-          notes?: string | null
-          priority?: string | null
-          specialty: string
-          status?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          doctor_name?: string | null
-          id?: string
-          location?: string | null
-          notes?: string | null
-          priority?: string | null
-          specialty?: string
-          status?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       study_items: {
         Row: {

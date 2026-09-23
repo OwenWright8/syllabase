@@ -32,6 +32,10 @@ const TABLES = [
   "study_items",
   "notification_settings",
   "widget_api_keys",
+  "course_documents",
+  "course_document_chunks",
+  "document_pages",
+  "document_limits",
 ] as const;
 export type Table = (typeof TABLES)[number];
 
@@ -52,9 +56,15 @@ export interface FakeBackendOptions {
   signedIn?: boolean;
   courses?: Row[];
   tasks?: Row[];
+  documents?: Row[];
+  /** Override the upload limits (same names as the document_limits columns). */
+  documentLimits?: Partial<{ enabled: boolean; max_file_bytes: number; max_user_bytes: number; max_pages: number }>;
   /** Origin the app is loaded from (default: APP_ORIGIN). */
   origin?: string;
 }
+
+/** What the fake "worker" does with a document once it is queued. */
+export type WorkerOutcome = { status: "ready"; page_count: number } | { status: "failed"; error: string };
 
 export class FakeBackend {
   readonly db: Record<Table, Row[]>;
@@ -66,6 +76,12 @@ export class FakeBackend {
   patchDelayMs = 0;
   /** Answer PATCHes with a 500, to exercise rollback. */
   failPatches = false;
+  /** How long the fake worker takes per stage (queued -> processing -> done). */
+  workerDelayMs = 150;
+  /** Decide each queued document's fate (default: ready, 12 pages). */
+  workerOutcome: (doc: Row) => WorkerOutcome = () => ({ status: "ready", page_count: 12 });
+  /** Answer the chunk with this sequence number with a 500 (upload dies part-way). */
+  failChunkAt: number | null = null;
   private readonly hasAccounts: boolean;
 
   constructor(options: FakeBackendOptions) {
@@ -81,6 +97,16 @@ export class FakeBackend {
     });
     this.db.courses.push(...(options.courses ?? []));
     this.db.tasks.push(...(options.tasks ?? []));
+    this.db.course_documents.push(...(options.documents ?? []));
+    this.db.document_limits.push({
+      id: "limits",
+      singleton: true,
+      enabled: true,
+      max_file_bytes: 200 * 1024 * 1024,
+      max_user_bytes: 1024 * 1024 * 1024,
+      max_pages: 1500,
+      ...options.documentLimits,
+    });
   }
 
   /** Rows of `table` the app has POSTed, in order. */
@@ -106,6 +132,70 @@ export class FakeBackend {
     return out;
   }
 
+  // --- the database rules for course documents, as the migration defines them ---
+
+  private get limits() {
+    return this.db.document_limits[0] as Row & { enabled: boolean; max_file_bytes: number; max_user_bytes: number };
+  }
+
+  private hexBytes(value: unknown): number {
+    return typeof value === "string" && value.startsWith("\\x") ? (value.length - 2) / 2 : 0;
+  }
+
+  private rlsRefusal(table: string) {
+    return { status: 403, body: { code: "42501", message: `new row violates row-level security policy for table "${table}"`, details: null, hint: null } };
+  }
+
+  /** The INSERT policy on course_documents: own course, uploads on, within the file and per-user limits. */
+  private checkNewDocument(item: Record<string, unknown>) {
+    const used = this.db.course_documents.reduce((total, d) => total + Number(d.size_bytes), 0);
+    const size = Number(item.size_bytes);
+    const ownCourse = this.db.courses.some((c) => c.id === item.course_id);
+    if (!ownCourse || !this.limits.enabled || !(size > 0) || size > this.limits.max_file_bytes || used + size > this.limits.max_user_bytes) {
+      return this.rlsRefusal("course_documents");
+    }
+    return null;
+  }
+
+  /** The chunk trigger: 1 byte..1 MiB, document still uploading, never past the declared size. */
+  private checkChunk(item: Record<string, unknown>) {
+    const bad = (message: string) => ({ status: 400, body: { code: "23514", message, details: null, hint: null } });
+    if (this.failChunkAt !== null && Number(item.seq) === this.failChunkAt) {
+      return { status: 500, body: { code: "XX000", message: "boom", details: "", hint: null } };
+    }
+    const bytes = this.hexBytes(item.data);
+    if (bytes === 0 || bytes > 1048576) return bad(`A chunk must be between 1 byte and 1 MiB (got ${bytes} bytes).`);
+    const doc = this.db.course_documents.find((d) => d.id === item.document_id);
+    if (!doc || doc.status !== "uploading") return bad("That document is not accepting chunks.");
+    if (Number(doc.uploaded_bytes) + bytes > Number(doc.size_bytes)) return bad("The chunks are larger than the declared file size.");
+    return null;
+  }
+
+  /** The update trigger: a user may only queue an uploading/failed document, and only once fully uploaded. */
+  private checkQueue(doc: Row, next: string) {
+    const bad = (message: string) => ({ code: "23514", message, details: null, hint: null });
+    if (!(["uploading", "failed"].includes(String(doc.status)) && next === "queued")) {
+      return bad(`A document can only be queued for processing (from uploading or failed), not moved from ${doc.status} to ${next}.`);
+    }
+    if (doc.status === "uploading" && Number(doc.uploaded_bytes) !== Number(doc.size_bytes)) {
+      return bad(`The upload is incomplete (${doc.uploaded_bytes} of ${doc.size_bytes} bytes).`);
+    }
+    return null;
+  }
+
+  /** Stand-in for the worker: queued -> processing -> ready/failed. */
+  private simulateWorker(doc: Row) {
+    setTimeout(() => {
+      if (!this.db.course_documents.includes(doc)) return; // deleted meanwhile
+      Object.assign(doc, { status: "processing", progress: 40, error: null });
+      setTimeout(() => {
+        if (!this.db.course_documents.includes(doc)) return;
+        const outcome = this.workerOutcome(doc);
+        Object.assign(doc, outcome.status === "ready" ? { status: "ready", progress: 100, page_count: outcome.page_count } : { status: "failed", error: outcome.error });
+      }, this.workerDelayMs);
+    }, this.workerDelayMs);
+  }
+
   async handle(route: Route): Promise<void> {
     const request = route.request();
     const url = new URL(request.url());
@@ -127,7 +217,14 @@ export class FakeBackend {
     this.requests.push({ table, method });
 
     if (method === "GET" || method === "HEAD") {
-      const rows = this.db[table].map((r) => this.withRelations(r));
+      // The fake mostly ignores filters, but equality on these ids matters to how
+      // the app scopes documents (per course, per document).
+      let source = this.db[table];
+      for (const column of ["course_id", "document_id", "id"]) {
+        const wanted = url.searchParams.get(column);
+        if (wanted?.startsWith("eq.")) source = source.filter((r) => !(column in r) || String(r[column]) === wanted.slice(3));
+      }
+      const rows = source.map((r) => this.withRelations(r));
       if ((request.headers()["accept"] ?? "").includes("vnd.pgrst.object")) {
         return rows.length ? json(200, rows[0]) : json(406, { code: "PGRST116", message: "no rows", details: "", hint: null });
       }
@@ -137,18 +234,35 @@ export class FakeBackend {
     if (method === "POST") {
       const body = JSON.parse(request.postData() ?? "[]") as Record<string, unknown> | Record<string, unknown>[];
       const items = Array.isArray(body) ? body : [body];
+      if (table === "course_documents" || table === "course_document_chunks") {
+        const refusal = table === "course_documents" ? this.checkNewDocument(items[0]) : this.checkChunk(items[0]);
+        if (refusal) return json(refusal.status, refusal.body);
+      }
       const stored = items.map((item): Row => ({
         id: randomUUID(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         status: "not_started",
         completed_at: null,
+        ...(table === "course_documents" ? { status: "uploading", uploaded_bytes: 0, progress: 0, error: null, page_count: null, page_offset: 0 } : {}),
         ...item,
       }));
+      if (table === "course_document_chunks") {
+        // keep only what the checks need (the bytes themselves would just fill memory)
+        for (const chunk of stored) {
+          const doc = this.db.course_documents.find((d) => d.id === chunk.document_id);
+          if (doc) doc.uploaded_bytes = Number(doc.uploaded_bytes) + this.hexBytes(chunk.data);
+          chunk.data = "";
+        }
+      }
       this.db[table].push(...stored);
       this.writes.push({ table, method, body: items });
       const wantsBody = (request.headers()["prefer"] ?? "").includes("return=representation");
-      return wantsBody ? json(201, stored.map((r) => this.withRelations(r))) : route.fulfill({ status: 201, headers: cors, body: "" });
+      // Like PostgREST: a single object when the client asked for one (supabase-js .single()), else an array.
+      const asObject = (request.headers()["accept"] ?? "").includes("vnd.pgrst.object");
+      return wantsBody
+        ? json(201, asObject ? this.withRelations(stored[0]) : stored.map((r) => this.withRelations(r)))
+        : route.fulfill({ status: 201, headers: cors, body: "" });
     }
 
     if (method === "PATCH") {
@@ -158,6 +272,11 @@ export class FakeBackend {
       if (this.failPatches) return json(500, { code: "XX000", message: "boom", details: "", hint: null });
       const id = url.searchParams.get("id")?.replace("eq.", "");
       const row = this.db[table].find((r) => r.id === id);
+      if (row && table === "course_documents" && patch.status !== undefined && patch.status !== row.status) {
+        const refusal = this.checkQueue(row, String(patch.status));
+        if (refusal) return json(400, refusal);
+        this.simulateWorker(row);
+      }
       if (row) Object.assign(row, patch);
       return route.fulfill({ status: 204, headers: cors });
     }
@@ -166,6 +285,11 @@ export class FakeBackend {
       this.writes.push({ table, method, body: [] });
       const id = url.searchParams.get("id")?.replace("eq.", "");
       this.db[table] = this.db[table].filter((r) => r.id !== id);
+      if (table === "course_documents") {
+        // ON DELETE CASCADE
+        this.db.course_document_chunks = this.db.course_document_chunks.filter((c) => c.document_id !== id);
+        this.db.document_pages = this.db.document_pages.filter((p) => p.document_id !== id);
+      }
       return route.fulfill({ status: 204, headers: cors });
     }
 

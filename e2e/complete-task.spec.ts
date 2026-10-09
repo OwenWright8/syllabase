@@ -55,8 +55,8 @@ test.describe("completing a task feels instant", () => {
     await page.goto("/");
     await page.getByRole("button", { name: 'Mark "Seed task" complete' }).click();
 
-    // The app shows a generic message rather than the database's own error text.
-    await expect(page.getByText("Something went wrong")).toBeVisible();
+    // The server's own reason is shown (the fake answers with "boom"), not a generic message.
+    await expect(page.getByText("boom")).toBeVisible();
     await expect(page.getByText("Seed task")).toBeVisible();
     await expect(page.getByRole("button", { name: 'Mark "Seed task" complete' })).toBeEnabled();
     expect(backend.db.tasks[0].status).toBe("not_started");

@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Calendar, CheckSquare, LogOut, User, Menu, GraduationCap, FileText, ClipboardList, X, BrainCircuit, CalendarRange } from "lucide-react";
+import { Calendar, CheckSquare, LogOut, User, Menu, GraduationCap, FileText, ClipboardList, X, BrainCircuit, CalendarRange, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,6 +26,7 @@ export function Layout({ children }: LayoutProps) {
     { path: "/assignments", label: "Assignments", icon: CheckSquare },
     { path: "/readings", label: "Readings", icon: FileText },
     { path: "/study", label: "Study", icon: BrainCircuit },
+    { path: "/flashcards", label: "Flashcards", icon: Layers },
     { path: "/exams", label: "Exams", icon: ClipboardList },
     { path: "/courses", label: "Courses", icon: GraduationCap },
     { path: "/profile", label: "Profile", icon: User },

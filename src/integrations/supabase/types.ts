@@ -313,6 +313,136 @@ export type Database = {
         }
         Relationships: []
       }
+      flashcard_decks: {
+        Row: {
+          course_id: string | null
+          created_at: string
+          description: string
+          exam_id: string | null
+          id: string
+          quiz_id: string | null
+          settings: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          course_id?: string | null
+          created_at?: string
+          description?: string
+          exam_id?: string | null
+          id?: string
+          quiz_id?: string | null
+          settings?: Json
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          course_id?: string | null
+          created_at?: string
+          description?: string
+          exam_id?: string | null
+          id?: string
+          quiz_id?: string | null
+          settings?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flashcard_decks_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flashcard_decks_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flashcard_decks_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flashcard_test_results: {
+        Row: {
+          answers: Json
+          correct: number
+          created_at: string
+          deck_id: string
+          id: string
+          total: number
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          correct: number
+          created_at?: string
+          deck_id: string
+          id?: string
+          total: number
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          correct?: number
+          created_at?: string
+          deck_id?: string
+          id?: string
+          total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      flashcards: {
+        Row: {
+          created_at: string
+          deck_id: string
+          definition: string
+          id: string
+          known: boolean
+          position: number
+          starred: boolean
+          term: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deck_id: string
+          definition: string
+          id?: string
+          known?: boolean
+          position?: number
+          starred?: boolean
+          term: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deck_id?: string
+          definition?: string
+          id?: string
+          known?: boolean
+          position?: number
+          starred?: boolean
+          term?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notification_settings: {
         Row: {
           assignments_enabled: boolean

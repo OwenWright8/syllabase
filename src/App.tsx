@@ -24,6 +24,10 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Readings = lazy(() => import("./pages/Readings"));
 const Study = lazy(() => import("./pages/Study"));
 const Planner = lazy(() => import("./pages/Planner"));
+const Flashcards = lazy(() => import("./pages/Flashcards"));
+const FlashcardDeck = lazy(() => import("./pages/FlashcardDeck"));
+const FlashcardEditor = lazy(() => import("./pages/FlashcardEditor"));
+const FlashcardStudy = lazy(() => import("./pages/FlashcardStudy"));
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
@@ -132,6 +136,15 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {[
+                  { path: "/flashcards", element: <Flashcards /> },
+                  { path: "/flashcards/new", element: <FlashcardEditor /> },
+                  { path: "/flashcards/:deckId", element: <FlashcardDeck /> },
+                  { path: "/flashcards/:deckId/edit", element: <FlashcardEditor /> },
+                  { path: "/flashcards/:deckId/:mode", element: <FlashcardStudy /> },
+                ].map(({ path, element }) => (
+                  <Route key={path} path={path} element={<ProtectedRoute>{element}</ProtectedRoute>} />
+                ))}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

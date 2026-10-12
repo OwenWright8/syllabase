@@ -129,19 +129,30 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.flashcard_decks, public.flashcard
 -- Size bounds (open sign-up): decks per user, cards per deck, results kept per
 -- deck. Only a signed-in user's writes are counted.
 -- ---------------------------------------------------------------------------
+-- (One function per table: PL/pgSQL can't mention NEW.deck_id in a function
+-- that also runs for decks, which have no such column, even in a branch that
+-- isn't taken.)
+CREATE OR REPLACE FUNCTION public.limit_flashcard_decks()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user = 'authenticated'
+     AND (SELECT count(*) FROM public.flashcard_decks d WHERE d.user_id = NEW.user_id) >= 1000 THEN
+    RAISE EXCEPTION 'You can have at most 1000 flashcard decks.' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.limit_flashcards()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public
 AS $$
 BEGIN
-  IF current_user <> 'authenticated' THEN
-    RETURN NEW;
-  END IF;
-  IF TG_TABLE_NAME = 'flashcard_decks'
-     AND (SELECT count(*) FROM public.flashcard_decks d WHERE d.user_id = NEW.user_id) >= 1000 THEN
-    RAISE EXCEPTION 'You can have at most 1000 flashcard decks.' USING ERRCODE = 'check_violation';
-  ELSIF TG_TABLE_NAME = 'flashcards'
+  IF current_user = 'authenticated'
      AND (SELECT count(*) FROM public.flashcards c WHERE c.deck_id = NEW.deck_id) >= 5000 THEN
     RAISE EXCEPTION 'A deck can have at most 5000 cards.' USING ERRCODE = 'check_violation';
   END IF;
@@ -150,7 +161,7 @@ END;
 $$;
 
 CREATE TRIGGER limit_flashcard_decks BEFORE INSERT ON public.flashcard_decks
-  FOR EACH ROW EXECUTE FUNCTION public.limit_flashcards();
+  FOR EACH ROW EXECUTE FUNCTION public.limit_flashcard_decks();
 CREATE TRIGGER limit_flashcards BEFORE INSERT ON public.flashcards
   FOR EACH ROW EXECUTE FUNCTION public.limit_flashcards();
 

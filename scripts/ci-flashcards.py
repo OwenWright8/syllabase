@@ -93,6 +93,9 @@ def main():
     print("== decks and the links to a course, exam and quiz")
     status, rows = a.deck(title="Organelles", course_id=course, exam_id=exam, quiz_id=quiz, settings={"write": {"answerWith": "definition"}})
     check("a deck linked to your own course, exam and quiz is created", status == 201, (status, rows))
+    if status != 201:
+        print("\nCan't go on without a deck.")
+        return 1
     deck = rows[0]["id"]
     status, rows = a.rest(
         "GET",

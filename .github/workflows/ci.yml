@@ -235,6 +235,15 @@ jobs:
           API_URL=http://localhost:8080 ANON_KEY="${CI_ANON_KEY}" ACCESS_TOKEN="${CI_ACCESS_TOKEN}" \
             /tmp/fixtures-venv/bin/python scripts/ci-documents.py
 
+      # The browser tests run flashcards against a fake backend, so the real
+      # database's rules and PostgREST's behaviour (the joins, the editor's
+      # upsert, two users kept apart, links to someone else's exam refused,
+      # result trimming, cascades) are checked here. See scripts/ci-flashcards.py.
+      - name: Flashcards work against the real database (rules, isolation, upsert)
+        run: |
+          API_URL=http://localhost:8080 ANON_KEY="${CI_ANON_KEY}" ACCESS_TOKEN="${CI_ACCESS_TOKEN}" \
+            python3 scripts/ci-flashcards.py
+
       # The worker parses untrusted files, so its sandbox is checked, not assumed.
       - name: The document worker is sandboxed
         run: |

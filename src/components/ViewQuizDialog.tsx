@@ -1,3 +1,4 @@
+import { LinkedDecks } from "@/components/flashcards/LinkedDecks";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -222,6 +223,8 @@ export function ViewQuizDialog({ quiz, courses, open, onOpenChange, onSuccess, t
                   <p className="text-sm text-muted-foreground">{quiz.topics}</p>
                 </div>
               )}
+
+              <LinkedDecks quizId={quiz.id} courseId={quiz.course?.id} onNavigate={() => onOpenChange(false)} />
 
               <div className="flex justify-between pt-4 border-t">
                 <Button

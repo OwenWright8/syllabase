@@ -38,6 +38,9 @@ const TABLES = [
   "document_limits",
   "document_chapters",
   "document_extracts",
+  "flashcard_decks",
+  "flashcards",
+  "flashcard_test_results",
 ] as const;
 export type Table = (typeof TABLES)[number];
 
@@ -65,6 +68,10 @@ export interface FakeBackendOptions {
   /** Extracted text of documents (one row per page: document_id, page, text). */
   pages?: Row[];
   readings?: Row[];
+  exams?: Row[];
+  quizzes?: Row[];
+  decks?: Row[];
+  cards?: Row[];
   /** Override the upload limits (same names as the document_limits columns). */
   documentLimits?: Partial<{ enabled: boolean; max_file_bytes: number; max_user_bytes: number; max_documents: number }>;
   /** Origin the app is loaded from (default: APP_ORIGIN). */
@@ -123,6 +130,10 @@ export class FakeBackend {
     this.db.document_chapters.push(...(options.chapters ?? []));
     this.db.document_pages.push(...(options.pages ?? []));
     this.db.readings.push(...(options.readings ?? []));
+    this.db.exams.push(...(options.exams ?? []));
+    this.db.quizzes.push(...(options.quizzes ?? []));
+    this.db.flashcard_decks.push(...(options.decks ?? []));
+    this.db.flashcards.push(...(options.cards ?? []));
     this.db.document_limits.push({
       id: "limits",
       singleton: true,
@@ -147,6 +158,19 @@ export class FakeBackend {
   /** How many requests of `method` hit `table` so far. */
   count(table: Table, method = "GET"): number {
     return this.requests.filter((r) => r.table === table && r.method === method).length;
+  }
+
+  /** The rows a PATCH/DELETE addresses: by `id=eq.` / `id=in.(...)`, or `deck_id=eq.`. */
+  private targeted(table: Table, url: URL): Row[] {
+    const id = url.searchParams.get("id");
+    const deck = url.searchParams.get("deck_id");
+    if (id?.startsWith("in.(")) {
+      const ids = id.slice(4, -1).split(",").map((v) => v.replace(/^"|"$/g, ""));
+      return this.db[table].filter((r) => ids.includes(r.id));
+    }
+    if (id?.startsWith("eq.")) return this.db[table].filter((r) => r.id === id.slice(3));
+    if (deck?.startsWith("eq.")) return this.db[table].filter((r) => r.deck_id === deck.slice(3));
+    return [];
   }
 
   private withRelations(row: Row): Row {
@@ -313,9 +337,15 @@ export class FakeBackend {
       // The fake mostly ignores filters, but equality on these ids matters to how
       // the app scopes documents (per course, per document).
       let source = this.db[table];
-      for (const column of table === "course_documents" ? ["course_id", "document_id", "id", "kind", "status"] : ["course_id", "document_id", "id", "start_page", "end_page"]) {
+      for (const column of table === "course_documents" ? ["course_id", "document_id", "id", "kind", "status"] : ["course_id", "document_id", "deck_id", "id", "start_page", "end_page"]) {
         const wanted = url.searchParams.get(column);
         if (wanted?.startsWith("eq.")) source = source.filter((r) => !(column in r) || String(r[column]) === wanted.slice(3));
+      }
+      // Simple ordering ("position.asc", "created_at.desc"), for the tables whose order the app relies on.
+      const order = url.searchParams.get("order")?.split(",")[0]?.split(".");
+      if (order && table.startsWith("flashcard")) {
+        const [column, direction] = order;
+        source = [...source].sort((a, b) => (a[column] === b[column] ? 0 : (a[column] as never) < (b[column] as never) ? -1 : 1) * (direction === "desc" ? -1 : 1));
       }
       const rows = source.map((r) => this.withRelations(r));
       if ((request.headers()["accept"] ?? "").includes("vnd.pgrst.object")) {
@@ -352,6 +382,8 @@ export class FakeBackend {
         completed_at: null,
         ...(table === "course_documents" ? { status: "uploading", uploaded_bytes: 0, progress: 0, error: null, page_count: null, page_offset: 0 } : {}),
         ...(table === "document_extracts" ? { status: "pending", error: null, size_bytes: null } : {}),
+        ...(table === "flashcard_decks" ? { description: "", settings: {}, course_id: null, exam_id: null, quiz_id: null } : {}),
+        ...(table === "flashcards" ? { starred: false, known: false, position: 0 } : {}),
         ...item,
         // whatever a signed-in user sends, the database records their chapters as manual
         ...(table === "document_chapters" ? { source: "manual" } : {}),
@@ -364,7 +396,17 @@ export class FakeBackend {
           chunk.data = "";
         }
       }
-      this.db[table].push(...stored);
+      if ((request.headers()["prefer"] ?? "").includes("resolution=merge-duplicates")) {
+        // An upsert: rows whose id exists are updated in place, the rest added.
+        for (const row of stored) {
+          const existing = this.db[table].find((r) => r.id === row.id);
+          if (existing) {
+            // (the insert defaults mustn't overwrite what the row already has)
+            const changes = Object.fromEntries(Object.entries(row).filter(([key]) => !["created_at", "status", "completed_at"].includes(key)));
+            Object.assign(existing, changes);
+          } else this.db[table].push(row);
+        }
+      } else this.db[table].push(...stored);
       if (table === "document_extracts") this.simulateExtract(stored[0]);
       this.writes.push({ table, method, body: items });
       const wantsBody = (request.headers()["prefer"] ?? "").includes("return=representation");
@@ -393,6 +435,10 @@ export class FakeBackend {
         Object.assign(row, patch, { source: "manual" }); // recorded as the user's own, whatever they send
         return route.fulfill({ status: 204, headers: cors });
       }
+      if (table === "flashcard_decks" || table === "flashcards" || table === "flashcard_test_results") {
+        for (const target of this.targeted(table, url)) Object.assign(target, patch, { updated_at: new Date().toISOString() });
+        return route.fulfill({ status: 204, headers: cors });
+      }
       if (row) Object.assign(row, patch);
       return route.fulfill({ status: 204, headers: cors });
     }
@@ -400,6 +446,15 @@ export class FakeBackend {
     if (method === "DELETE") {
       this.writes.push({ table, method, body: [] });
       const id = url.searchParams.get("id")?.replace("eq.", "");
+      if (table === "flashcard_decks" || table === "flashcards" || table === "flashcard_test_results") {
+        const gone = new Set(this.targeted(table, url).map((r) => r.id));
+        this.db[table] = this.db[table].filter((r) => !gone.has(r.id));
+        if (table === "flashcard_decks") {
+          this.db.flashcards = this.db.flashcards.filter((c) => !gone.has(String(c.deck_id)));
+          this.db.flashcard_test_results = this.db.flashcard_test_results.filter((t) => !gone.has(String(t.deck_id)));
+        }
+        return route.fulfill({ status: 204, headers: cors });
+      }
       this.db[table] = this.db[table].filter((r) => r.id !== id);
       if (table === "course_documents") {
         // ON DELETE CASCADE

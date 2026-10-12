@@ -148,6 +148,15 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 - Study items can link to a specific exam/quiz, with priority and status.
 - A dedicated Study page and Today-page widget surface what needs attention.
 
+### 🗂 Flashcards
+- Make decks of terms and definitions, optionally for a course and linked to an exam and/or a quiz (the exam's and quiz's details show their decks).
+- Type cards in, or paste a list: Quizlet's export works as it is, and other separators can be chosen. Star cards, reorder them, or swap every term and definition.
+- Three ways to study:
+  - **Flashcards**: flip through and sort cards into "know it" and "still learning" (keyboard: Space flips, arrows move).
+  - **Write**: see one side and type the other. Missed cards come back until you've got them all.
+  - **Test**: answer a set of questions, then get a graded score, review each answer, count one as correct if the grading was too harsh, and retake the ones you missed. Past tests are kept.
+- Everything is adjustable per deck and remembered: which side you answer with (or both, mixed), which cards (all, starred, or the ones you're still learning), shuffling, test length, and how strict the grading is (capitals, punctuation, accents, small typos, and accepting long answers that have most of the key words). Answers can list alternatives with ";" and optional words in (parentheses).
+
 ### 📖 Readings & Planner
 - Track readings alongside assignments.
 - A day-planner view for ordering exactly what you're working on, when.

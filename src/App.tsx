@@ -13,6 +13,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageTransition } from "@/components/PageTransition";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import { errorMessage } from "@/lib/errors";
 
 const Today = lazy(() => import("./pages/Today"));
 const Tasks = lazy(() => import("./pages/Tasks"));
@@ -25,9 +26,6 @@ const Readings = lazy(() => import("./pages/Readings"));
 const Study = lazy(() => import("./pages/Study"));
 const Planner = lazy(() => import("./pages/Planner"));
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Something went wrong";
-}
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({

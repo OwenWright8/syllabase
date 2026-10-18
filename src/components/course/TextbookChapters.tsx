@@ -36,8 +36,10 @@ function provenance(chapters: DocumentChapter[]): string {
   return "Some found automatically, some added by you. Check the page numbers before relying on them.";
 }
 
-export function TextbookChapters({ doc }: { doc: CourseDocument }) {
-  const [open, setOpen] = useState(false);
+/** A textbook's chapters, each downloadable. `alwaysOpen` shows them straight away, without the expand toggle. */
+export function TextbookChapters({ doc, alwaysOpen = false }: { doc: CourseDocument; alwaysOpen?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const open = alwaysOpen || expanded;
   const { data: chapters = [], isLoading } = useDocumentChapters(doc.id, open);
   const downloads = usePageDownloads();
   const deleteChapter = useDeleteChapter();
@@ -53,19 +55,21 @@ export function TextbookChapters({ doc }: { doc: CourseDocument }) {
     downloads.download({ documentId: doc.id, start, end, filename: downloadFilename(doc.filename, label, start, end) });
 
   return (
-    <div className="mt-3 border-t border-border pt-2">
-      <button
-        type="button"
-        className="flex items-center gap-1 text-sm font-medium text-foreground hover:text-primary"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        Chapters and downloads
-      </button>
+    <div className={alwaysOpen ? undefined : "mt-3 border-t border-border pt-2"}>
+      {!alwaysOpen && (
+        <button
+          type="button"
+          className="flex items-center gap-1 text-sm font-medium text-foreground hover:text-primary"
+          aria-expanded={open}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          Chapters and downloads
+        </button>
+      )}
 
       {open && (
-        <div className="mt-2 space-y-2">
+        <div className={alwaysOpen ? "space-y-2" : "mt-2 space-y-2"}>
           {isLoading ? (
             <p className="text-xs text-muted-foreground">Loading…</p>
           ) : chapters.length === 0 ? (

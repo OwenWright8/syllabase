@@ -71,9 +71,24 @@ COPY docker/nginx.app.conf /etc/nginx/conf.d/default.conf
 COPY docker/start.sh /app/start.sh
 COPY docker/secrets.sh /app/secrets.sh
 COPY docker/documents.sh /app/documents.sh
+COPY docker/update-check.sh /app/update-check.sh
 # Root-owned and read-only to the worker user, so a bug in the worker can't rewrite its own code.
 COPY docker/worker /app/worker
 RUN chmod +x /app/start.sh /app/migrate.sh
+
+# Which release this image is, and where its releases come from: shown in the
+# app (Profile → About) and used by the update reminder. The release workflow
+# passes the tag; a local build is "dev". Declared last so changing them
+# doesn't invalidate the layers above.
+ARG SYLLABASE_BUILD_VERSION=dev
+ARG SYLLABASE_REPO=OwenWright8/syllabase
+ENV SYLLABASE_BUILD_VERSION=$SYLLABASE_BUILD_VERSION \
+    SYLLABASE_REPO=$SYLLABASE_REPO
+LABEL org.opencontainers.image.title="Syllabase" \
+      org.opencontainers.image.description="A self-hosted study and homework planner" \
+      org.opencontainers.image.version=$SYLLABASE_BUILD_VERSION \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/${SYLLABASE_REPO}"
 
 EXPOSE 8080
 # Probes GoTrue through the gateway, not just nginx: nginx serves the static

@@ -1,0 +1,48 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Please check you're on the latest release first (Profile → About shows your version).
+  - type: input
+    id: version
+    attributes:
+      label: Syllabase version
+      description: Shown on Profile → About, e.g. v0.7.0.
+      placeholder: v0.7.0
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is it running?
+      options:
+        - Prebuilt images (docker compose pull)
+        - Built from source
+        - Other
+  - type: input
+    id: platform
+    attributes:
+      label: Server and browser
+      placeholder: Raspberry Pi 5 (arm64), Firefox 131
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The output of `docker compose logs app --tail 100`, if relevant. Check it for anything private before posting.
+      render: shell

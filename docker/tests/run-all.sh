@@ -7,7 +7,7 @@
 set -u
 cd "$(dirname "$0")"
 status=0
-for t in secrets.test.sh db-entrypoint.test.sh start-config.test.sh documents.test.sh; do
+for t in secrets.test.sh db-entrypoint.test.sh start-config.test.sh documents.test.sh update-check.test.sh; do
   echo "=== $t"
   bash "./$t" || status=1
 done

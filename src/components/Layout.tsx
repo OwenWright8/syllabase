@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Calendar, CheckSquare, LogOut, User, Menu, GraduationCap, FileText, ClipboardList, X, BrainCircuit, CalendarRange, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -168,7 +169,8 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </nav>
-      
+      <UpdateBanner />
+
       <main className="relative container mx-auto px-4 py-6 sm:py-8">
         {children}
       </main>

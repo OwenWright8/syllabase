@@ -18,6 +18,7 @@ import { applyColorTheme, colorThemes } from "@/lib/colorThemes";
 import { SUPABASE_URL } from "@/lib/runtimeConfig";
 import { Clock, CalendarDays } from "lucide-react";
 import { WidgetApiKeySection } from "@/components/WidgetApiKeySection";
+import { AboutSection } from "@/components/AboutSection";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -450,6 +451,9 @@ export default function Profile() {
 
           {/* Homepage Widget */}
           <WidgetApiKeySection />
+
+          {/* About: version and updates */}
+          <AboutSection />
 
           {/* Delete Account */}
           <div className="col-span-12 glass-strong rounded-2xl p-5 border border-destructive/30">

@@ -79,6 +79,8 @@ services:
       DOCUMENT_MAX_FILE_MB: ${DOCUMENT_MAX_FILE_MB:-}
       DOCUMENT_USER_QUOTA_MB: ${DOCUMENT_USER_QUOTA_MB:-}
       DOCUMENT_MAX_COUNT: ${DOCUMENT_MAX_COUNT:-}
+      # "off" stops the app from checking GitHub for new releases.
+      UPDATE_CHECK: ${UPDATE_CHECK:-on}
     volumes:
       - secrets:/secrets
     logging: *default-logging

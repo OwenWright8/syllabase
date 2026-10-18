@@ -48,6 +48,10 @@ GOTRUE_PLACEHOLDER_URL="http://localhost:9999"
 . /app/documents.sh
 documents_settings
 
+# The version this image was built as, and the update reminder (see update-check.sh).
+. /app/update-check.sh
+update_check_settings
+
 # `docker restart` keeps the container filesystem, so clear the marker the
 # watchdog below leaves behind when a backend dies.
 rm -f /tmp/backend-died
@@ -135,9 +139,10 @@ SQLEOF
 echo "[start] writing runtime frontend config..."
 # The browser-facing key IS the anon key (same value, different name in the
 # frontend). The API address isn't written here at all: the app calls the
-# address it was loaded from.
-export VITE_SUPABASE_PUBLISHABLE_KEY="$ANON_KEY"
-envsubst '${VITE_SUPABASE_PUBLISHABLE_KEY}' \
+# address it was loaded from. The version and repository let the app show
+# what it is running and link to its release notes.
+export VITE_SUPABASE_PUBLISHABLE_KEY="$ANON_KEY" SYLLABASE_BUILD_VERSION SYLLABASE_REPO
+envsubst '${VITE_SUPABASE_PUBLISHABLE_KEY} ${SYLLABASE_BUILD_VERSION} ${SYLLABASE_REPO}' \
   < /app/env.js.template \
   > /app/frontend/env.js
 
@@ -252,9 +257,26 @@ else
   echo "[start] document uploads are switched off (DOCUMENTS=off): not starting the worker"
 fi
 
+# `docker restart` keeps the container filesystem, so a reminder from before
+# must not outlive UPDATE_CHECK=off.
+rm -f /app/frontend/update.json
+UPDATE_CHECK_PID=""
+if [ "$UPDATE_CHECK_ENABLED" = true ]; then
+  echo "[start] checking for new releases of $SYLLABASE_REPO every 12 hours (running $SYLLABASE_BUILD_VERSION; UPDATE_CHECK=off turns this off)"
+  (
+    while :; do
+      update_check_once /app/frontend/update.json || echo "[start] couldn't check for a new release (will try again later)" >&2
+      sleep 43200
+    done
+  ) &
+  UPDATE_CHECK_PID=$!
+else
+  echo "[start] update check is switched off (UPDATE_CHECK=off)"
+fi
+
 cleanup() {
   echo "[start] shutting down..."
-  kill "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" $WORKER_SUPERVISOR_PIDS 2>/dev/null || true
+  kill "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" $WORKER_SUPERVISOR_PIDS $UPDATE_CHECK_PID 2>/dev/null || true
   wait "$GOTRUE_PID" "$POSTGREST_PID" "$EDGE_PID" 2>/dev/null || true
 }
 trap cleanup TERM INT

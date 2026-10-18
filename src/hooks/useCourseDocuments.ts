@@ -57,6 +57,9 @@ export function formatBytes(bytes: number): string {
 }
 
 /** Documents that still need something to happen: worth polling until they settle. */
+/** A textbook whose pages can be cut out: read, and with a known length. */
+export const isChapterReady = (doc: CourseDocument) => doc.kind === "textbook" && doc.status === "ready" && !!doc.page_count;
+
 const isActive = (doc: CourseDocument) => doc.status === "queued" || doc.status === "processing";
 
 export function useDocumentLimits() {

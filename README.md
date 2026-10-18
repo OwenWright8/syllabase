@@ -1,16 +1,53 @@
+<div align="center">
+
+<img src="public/pwa-512x512.png" alt="" width="96" height="96" />
+
 # Syllabase
 
-Syllabase is a self-hosted study and homework planner for people juggling multiple courses, homework, labs, and exams. Run it on your own server — your data stays on your own infrastructure.
+**A self-hosted study planner for students juggling courses, homework, labs and exams.**<br/>
+Your data stays on your own server. One `docker compose up -d`, nothing to configure.
 
-It helps you:
-- See everything due today (and what's coming next).
-- Break exam prep into multiple study days.
-- Track weekly progress with clean statistics.
-- Keep courses and past semesters organized.
-- Get optional push notifications (via your own Pushover account) for upcoming assignments, exams, and quizzes.
-- Access the app from desktop, mobile, and as an installable PWA.
+[![Latest release](https://img.shields.io/github/v/release/OwenWright8/syllabase?sort=semver&label=release)](https://github.com/OwenWright8/syllabase/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/OwenWright8/syllabase/ci.yml?branch=main&label=CI)](https://github.com/OwenWright8/syllabase/actions/workflows/ci.yml)
+[![Images on GHCR](https://img.shields.io/badge/images-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/OwenWright8/syllabase/pkgs/container/syllabase)
+![amd64 | arm64](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-555)
+[![MIT license](https://img.shields.io/github/license/OwenWright8/syllabase)](LICENSE)
 
----
+[Quickstart](#quickstart) · [Features](#features) · [Settings](#optional-settings) · [Updating](#updating) · [Backups](#backups) · [Release notes](https://github.com/OwenWright8/syllabase/releases)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/today-dark.png" />
+  <img src="docs/screenshots/today-light.png" alt="The Today page: today's plan, upcoming exams and quizzes, readings and weekly progress" width="900" />
+</picture>
+
+</div>
+
+## Why Syllabase
+
+- **Everything due, in one place.** Today's plan, what's coming up, exams counting down, and how your week is going.
+- **Your textbooks, by the chapter.** Upload a PDF and download just the chapter you need, found automatically from the book's bookmarks or contents page.
+- **Syllabus in, readings out.** Upload a syllabus and confirm the readings it finds; each one gets a download button for its pages.
+- **Study tools built in.** Flashcards with flip, write and graded test modes, linked to the exam they're for.
+- **Yours to run.** Two containers, no external accounts, works on a Raspberry Pi. Installable as an app on your phone.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/chapters.png" alt="A course's Chapters tab: every chapter of the textbook with a Download button" /></td>
+    <td width="50%"><img src="docs/screenshots/flashcards.png" alt="A flashcard deck with its three study modes" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Download any chapter of an uploaded textbook</sub></td>
+    <td align="center"><sub>Flashcards with flip, write and test modes</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/exams.png" alt="The exam calendar" /></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile.png" alt="The Today page on a phone" width="220" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Exams and quizzes on a calendar</sub></td>
+    <td align="center"><sub>Works on your phone, installable as an app</sub></td>
+  </tr>
+</table>
 
 ## Self-hosting
 
@@ -59,6 +96,8 @@ services:
       DOCUMENT_MAX_FILE_MB: ${DOCUMENT_MAX_FILE_MB:-}
       DOCUMENT_USER_QUOTA_MB: ${DOCUMENT_USER_QUOTA_MB:-}
       DOCUMENT_MAX_COUNT: ${DOCUMENT_MAX_COUNT:-}
+      # "off" stops the app from checking GitHub for new releases.
+      UPDATE_CHECK: ${UPDATE_CHECK:-on}
     volumes:
       - secrets:/secrets
     security_opt:
@@ -97,19 +136,43 @@ None of these are required. Docker Compose reads a `.env` file next to `docker-c
 | `APP_PORT` | The port the app is published on (default `8080`). |
 | `DOCUMENTS` | `off` disables uploading textbooks/syllabi and doesn't start the OCR worker (default `on`). |
 | `DOCUMENT_MAX_FILE_MB`, `DOCUMENT_USER_QUOTA_MB`, `DOCUMENT_MAX_COUNT` | Largest single upload (default 200 MB), total per user (default 1024 MB) and most documents per user (default 200). There is no limit on a PDF's page count. Sign-up is open, so these bound what any one account can store. Each also accepts `unlimited`, sensible on a private instance where you trust everyone with an account. These are only read if your compose file passes them to the `app` service, as the one above does. |
-| `SYLLABASE_VERSION` | Pin to a release tag (e.g. `v0.4.0`) instead of `latest`. |
+| `UPDATE_CHECK` | `off` stops the server from checking GitHub for new releases, and hides the update reminder (default `on`). See [Updating](#updating). |
+| `SYLLABASE_VERSION` | Pin to a release (e.g. `v0.7.0`), or to a minor series (e.g. `0.7`, which still gets patch releases) instead of `latest`. |
 
-### Upgrading
+### Updating
+
+When a new release comes out, Syllabase tells you: a slim **"Syllabase v0.8.0 is available — What's new"** note appears under the navigation bar, linking to that release's notes. It can be dismissed (it comes back for the next release), and **Profile → About** always shows the version you're running and whether it's current.
+
+To update:
 
 ```sh
 docker compose pull && docker compose up -d
 ```
 
-Migrations apply automatically, each in its own transaction. **Coming from v0.3.x or earlier** (where you ran `./setup.sh` and edited `.env`)? Nothing needs to change: your existing compose file and `.env` keep working, and `SITE_URL` is no longer used (delete it if you like). If you switch to the new compose file above, keep your `.env` next to it: it holds your database password, and the database refuses to start rather than guess a new one.
+Migrations apply automatically, each in its own transaction. Read the [release notes](https://github.com/OwenWright8/syllabase/releases) first: anything you need to do will be at the top.
+
+**How the check works, and turning it off.** Every 12 hours the `app` container makes one anonymous request to GitHub's public API for the latest release and saves the answer for the app. Nothing about your instance or its users is sent, and people's browsers never contact GitHub themselves. Set `UPDATE_CHECK=off` to stop it entirely.
+
+**Pinning a version.** `latest` always moves to the newest release. To decide when upgrades happen, set `SYLLABASE_VERSION` in `.env` to a release such as `v0.7.0`, or to a minor series such as `0.7` to keep getting bug-fix releases automatically but not new features. (Minor-series tags are published from v0.7.0 on.)
+
+**Coming from v0.3.x or earlier** (where you ran `./setup.sh` and edited `.env`)? Nothing needs to change: your existing compose file and `.env` keep working, and `SITE_URL` is no longer used (delete it if you like). If you switch to the new compose file above, keep your `.env` next to it: it holds your database password, and the database refuses to start rather than guess a new one.
 
 ### Backups
 
-Your data lives in the `db-data` volume and the keys that go with it live in the `secrets` volume, so back up **both**. If `secrets` is lost but `db-data` survives, the database will refuse to start (rather than silently create a password that doesn't match) and tell you what to restore.
+Your data lives in the `db-data` volume and the keys that go with it live in the `secrets` volume, so back up **both**. Uploaded textbooks and syllabi are stored in the database, so they are included.
+
+A simple way, from the folder with your `docker-compose.yml` (volume names are prefixed with the folder's name; `docker volume ls` shows them):
+
+```sh
+docker compose stop
+for v in db-data secrets; do
+  docker run --rm -v "$(basename "$PWD")_$v":/data -v "$PWD":/backup alpine \
+    tar czf "/backup/syllabase-$v-$(date +%F).tar.gz" -C /data .
+done
+docker compose start
+```
+
+To restore, recreate the volumes and extract each archive back into its volume before starting. If `secrets` is lost but `db-data` survives, the database will refuse to start (rather than silently create a password that doesn't match) and tell you what to restore.
 
 ### Security notes
 
@@ -139,7 +202,7 @@ Push notifications go through [Pushover](https://pushover.net) — each person b
 
 ### 📎 Course materials
 - Upload each class's textbooks (PDF) and syllabus (PDF, Word or a photo) on the course's **Materials** tab. Scans and photos are read with OCR on your own server.
-- A textbook's chapters are found from its bookmarks or its printed contents page (you can correct, add or remove them), and each chapter downloads as its own small PDF, so you can grab "chapter 5" instead of the whole book. Any page range can be downloaded too.
+- A textbook's chapters are found from its bookmarks or its printed contents page (you can correct, add or remove them), and each chapter downloads as its own small PDF, so you can grab "chapter 5" instead of the whole book. Once a textbook has been read, its course gets a **Chapters** tab listing every chapter with a Download button. Any page range can be downloaded too.
 - **Find readings** on an uploaded syllabus looks for what's due when ("Read Chapter 5 by 10/18", a table of weeks, dated headings) and asks you to confirm it before anything is added. Confirmed readings appear in your readings list, each with a **Download Ch. 5 (pp. 101–130)** button when the chapter is in one of your textbooks. Readings you type in yourself get the button too, as long as they name the chapter or pages ("Read Chapter 5") and that course's textbook has been read. Readings that were due in the past are added as done. This is rule-based, not AI, so always glance over the review: unusual layouts may be missed.
 - Files are stored in your database and processed by a sandboxed background worker; per-user limits apply (see `DOCUMENT_*` settings).
 
@@ -190,3 +253,13 @@ npm run test:e2e   # Playwright; needs no backend (see below)
 ```
 
 The end-to-end tests (`e2e/`) drive the real UI in Chromium against an in-memory fake of the backend (`e2e/support/fakeBackend.ts`), installed by intercepting network requests — so they run with no server, database or Docker. Run `npx playwright install chromium` once first.
+
+The README's screenshots come from the same setup, with a demo student's week: `SCREENSHOTS=1 npx playwright test e2e/screenshots.spec.ts` regenerates everything in `docs/screenshots/`.
+
+### Releasing
+
+Push a tag like `v0.7.0`. The release workflow creates the GitHub Release with notes grouped by PR label (see `.github/release.yml`: label PRs `feature`, `fix`, `breaking`…) and publishes both images as `:v0.7.0`, `:0.7` and `:latest`. A pre-release tag (`v0.8.0-rc.1`) is published under its own tag only. Running instances notice the new release within 12 hours.
+
+## License
+
+[MIT](LICENSE) © 2026 Owen Wright

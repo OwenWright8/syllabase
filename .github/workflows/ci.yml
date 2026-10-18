@@ -160,6 +160,22 @@ jobs:
           echo "$body" | grep -q 'VITE_SUPABASE_URL' && { echo "env.js must not carry an API address"; exit 1; }
           echo "CI_ANON_KEY=$key" >> "$GITHUB_ENV"
 
+      # A source build calls itself "dev"; the release workflow bakes in the tag.
+      # The update check runs in the background, so /update.json is either not
+      # there yet (a 404, never the SPA's index.html) or a well-formed release.
+      - name: The version is published and the update check is sane
+        run: |
+          curl -fsS http://localhost:8080/env.js | grep -q 'APP_VERSION: "dev"'
+          curl -fsS http://localhost:8080/env.js | grep -q 'APP_REPO: "OwenWright8/syllabase"'
+          docker compose logs app 2>&1 | grep -q "checking for new releases"
+          code=$(curl -sS -o update.json -w '%{http_code}' http://localhost:8080/update.json)
+          echo "update.json -> HTTP $code"; cat update.json; echo
+          if [ "$code" != 404 ]; then
+            [ "$code" = 200 ]
+            python3 -c "import json; d = json.load(open('update.json')); assert d['latest'].startswith('v') and d['url'].startswith('https://github.com/'), d"
+          fi
+          docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$(docker compose images -q app)" | grep -q 'github.com/OwenWright8/syllabase'
+
       - name: Secrets were generated and stored in the volume
         run: |
           docker compose exec -T db sh -c 'test -s /secrets/postgres_password'

@@ -250,3 +250,46 @@ test.describe("textbook chapters: other cases", () => {
     await expect(page.getByRole("button", { name: "Chapters and downloads" })).toHaveCount(0);
   });
 });
+
+test.describe("course Chapters tab", () => {
+  test("once a textbook is ready, the course has a Chapters tab listing every chapter to download", async ({ context, page }) => {
+    await installFakeBackend(context, { courses: [makeCourse()], documents: [book()], chapters: CHAPTERS() });
+    await page.goto(`/courses/${COURSE_ID}`);
+    await page.getByRole("tab", { name: "Chapters" }).click();
+
+    await expect(page.getByText("Chemistry 12e.pdf")).toBeVisible();
+    // already open: no toggle to press first
+    await expect(page.getByRole("button", { name: "Chapters and downloads" })).toHaveCount(0);
+    await expect(page.getByRole("listitem")).toHaveCount(3);
+
+    const { filename } = await downloadFrom(page, () => page.getByRole("button", { name: "Download Ch. 4: Genetics" }).click());
+    expect(filename).toBe("Chemistry 12e - Ch. 4 Genetics - pp88-129.pdf");
+  });
+
+  test("each ready textbook gets its own list", async ({ context, page }) => {
+    const second = "d0000000-0000-4000-8000-000000000009";
+    await installFakeBackend(context, {
+      courses: [makeCourse()],
+      documents: [book(), book({ id: second, filename: "Lab Manual.pdf", page_count: 80 })],
+      chapters: [...CHAPTERS(), { ...chapter(1, "Safety", 1, 10), document_id: second }],
+    });
+    await page.goto(`/courses/${COURSE_ID}`);
+    await page.getByRole("tab", { name: "Chapters" }).click();
+    await expect(page.getByText("Lab Manual.pdf")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download Ch. 1: Safety" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download Ch. 5: Cell Structure" })).toBeVisible();
+  });
+
+  test("no Chapters tab before a textbook is ready, or with only a syllabus", async ({ context, page }) => {
+    await installFakeBackend(context, {
+      courses: [makeCourse()],
+      documents: [
+        book({ status: "processing", progress: 40, page_count: null }),
+        book({ id: "d0000000-0000-4000-8000-000000000004", filename: "syllabus.pdf", kind: "syllabus", page_count: 3 }),
+      ],
+    });
+    await page.goto(`/courses/${COURSE_ID}`);
+    await expect(page.getByRole("tab", { name: "Materials" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Chapters" })).toHaveCount(0);
+  });
+});

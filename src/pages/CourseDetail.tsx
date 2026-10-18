@@ -4,7 +4,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Archive, ArchiveRestore, CheckSquare, FileText, BarChart3, Plus, Calendar, Library } from "lucide-react";
+import { ArrowLeft, Archive, ArchiveRestore, CheckSquare, FileText, BarChart3, Plus, Calendar, Library, BookOpen } from "lucide-react";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { TaskCard } from "@/components/TaskCard";
 import { toast } from "sonner";
@@ -16,6 +16,8 @@ import { CreateReadingDialog } from "@/components/readings/CreateReadingDialog";
 import { CourseExamsTab } from "@/components/course/CourseExamsTab";
 import { CourseStatsTab } from "@/components/course/CourseStatsTab";
 import { CourseMaterialsTab } from "@/components/course/CourseMaterialsTab";
+import { CourseChaptersTab } from "@/components/course/CourseChaptersTab";
+import { isChapterReady, useCourseDocuments } from "@/hooks/useCourseDocuments";
 import { formatTimeOfDay } from "@/lib/dateUtils";
 
 export default function CourseDetail() {
@@ -24,6 +26,7 @@ export default function CourseDetail() {
   const { timezone } = useUserTimezone();
   const { data: course, isLoading: courseLoading, isError: courseError } = useCourse(id);
   const { data: tasks = [], isLoading: tasksLoading } = useCourseTasks(id);
+  const { data: documents = [] } = useCourseDocuments(id);
   const markTaskDone = useMarkTaskDone();
   const toggleCourseArchive = useToggleCourseArchive();
   const [activeTab, setActiveTab] = useState("assignments");
@@ -78,6 +81,10 @@ export default function CourseDetail() {
 
   const activeReadings = readings.filter(r => r.status !== "done").length;
   const activeTasks = tasks.filter(t => t.type !== "exam_prep").length;
+  const textbooks = documents.filter(isChapterReady);
+  const hasChapters = textbooks.length > 0;
+  // If the last textbook goes away while its chapters are showing, fall back to the first tab.
+  const currentTab = activeTab === "chapters" && !hasChapters ? "assignments" : activeTab;
 
   return (
     <Layout>
@@ -130,8 +137,8 @@ export default function CourseDetail() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5 h-auto">
+        <Tabs value={currentTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className={`grid w-full ${hasChapters ? "grid-cols-6" : "grid-cols-5"} h-auto`}>
             <TabsTrigger value="assignments" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-1 sm:px-3">
               <CheckSquare className="h-4 w-4" />
               <span className="text-xs sm:text-sm">Assignments</span>
@@ -158,6 +165,12 @@ export default function CourseDetail() {
               <Library className="h-4 w-4" />
               <span className="text-xs sm:text-sm">Materials</span>
             </TabsTrigger>
+            {hasChapters && (
+              <TabsTrigger value="chapters" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-1 sm:px-3">
+                <BookOpen className="h-4 w-4" />
+                <span className="text-xs sm:text-sm">Chapters</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="stats" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-1 sm:px-3">
               <BarChart3 className="h-4 w-4" />
               <span className="text-xs sm:text-sm">Stats</span>
@@ -236,6 +249,13 @@ export default function CourseDetail() {
           <TabsContent value="materials">
             <CourseMaterialsTab courseId={id!} />
           </TabsContent>
+
+          {/* Chapters Tab */}
+          {hasChapters && (
+            <TabsContent value="chapters">
+              <CourseChaptersTab textbooks={textbooks} />
+            </TabsContent>
+          )}
 
           {/* Stats Tab */}
           <TabsContent value="stats">

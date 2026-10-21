@@ -31,13 +31,13 @@ export default defineConfig(({ mode }) => {
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'robots.txt'],
+      includeAssets: ['favicon.svg', 'favicon.png', 'apple-touch-icon.png', 'robots.txt'],
       manifest: {
         name: 'Syllabase',
         short_name: 'Syllabase',
         description: 'Self-hosted study planning tool for managing assignments, exams, and courses efficiently',
-        theme_color: '#8b5cf6',
-        background_color: '#1a1a2e',
+        theme_color: '#598d3f',
+        background_color: '#191715',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
@@ -54,7 +54,7 @@ export default defineConfig(({ mode }) => {
             type: 'image/png',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/pwa-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
